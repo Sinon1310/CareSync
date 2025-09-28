@@ -11,13 +11,19 @@ import {
   Star,
   Activity
 } from 'lucide-react';
-import type { UserRole } from '../App';
+import { useAuth } from '../contexts/AuthContext';
+const LandingPage: React.FC = () => {
+  const { setShowAuthModal, setAuthMode } = useAuth();
 
-interface LandingPageProps {
-  onNavigate: (view: UserRole) => void;
-}
+  const handleGetStarted = () => {
+    setAuthMode('register');
+    setShowAuthModal(true);
+  };
 
-const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => {
+  const handleSignIn = () => {
+    setAuthMode('login');
+    setShowAuthModal(true);
+  };
   const features = [
     {
       icon: Activity,
@@ -96,16 +102,16 @@ const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => {
               <a href="#contact" className="text-gray-600 hover:text-blue-600 transition-colors duration-200">Contact</a>
               <div className="flex space-x-3">
                 <button 
-                  onClick={() => onNavigate('patient')}
+                  onClick={handleSignIn}
                   className="px-4 py-2 text-blue-600 border border-blue-600 rounded-lg hover:bg-blue-50 transition-colors duration-200"
                 >
-                  Patient Portal
+                  Sign In
                 </button>
                 <button 
-                  onClick={() => onNavigate('doctor')}
+                  onClick={handleGetStarted}
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200"
                 >
-                  Doctor Portal
+                  Get Started
                 </button>
               </div>
             </div>
@@ -130,17 +136,17 @@ const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => {
               
               <div className="mt-8 flex flex-col sm:flex-row gap-4">
                 <button 
-                  onClick={() => onNavigate('patient')}
+                  onClick={handleGetStarted}
                   className="px-8 py-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all duration-200 transform hover:scale-105 flex items-center justify-center group"
                 >
-                  Start as Patient
+                  Get Started Free
                   <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform duration-200" />
                 </button>
                 <button 
-                  onClick={() => onNavigate('doctor')}
+                  onClick={handleSignIn}
                   className="px-8 py-4 border-2 border-blue-600 text-blue-600 rounded-lg hover:bg-blue-50 transition-colors duration-200 flex items-center justify-center"
                 >
-                  Doctor Dashboard
+                  Sign In
                 </button>
               </div>
 
@@ -259,16 +265,16 @@ const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => {
           
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <button 
-              onClick={() => onNavigate('patient')}
+              onClick={handleGetStarted}
               className="px-8 py-4 bg-white text-blue-600 rounded-lg hover:bg-gray-100 transition-colors duration-200 font-semibold"
             >
-              Get Started as Patient
+              Get Started Free
             </button>
             <button 
-              onClick={() => onNavigate('doctor')}
+              onClick={handleSignIn}
               className="px-8 py-4 border-2 border-white text-white rounded-lg hover:bg-white hover:text-blue-600 transition-colors duration-200 font-semibold"
             >
-              Join as Healthcare Provider
+              Sign In
             </button>
           </div>
         </div>

@@ -1,106 +1,123 @@
-import React from 'react';
+import React from 'react'
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+} from 'chart.js'
+import { Line } from 'react-chartjs-2'
+import { VitalReading } from '../lib/supabase'
 
-interface VitalReading {
-  id: string;
-  type: 'blood_pressure' | 'blood_sugar' | 'heart_rate';
-  value: string;
-  timestamp: Date;
-  status: 'normal' | 'warning' | 'critical';
-}
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend
+)
 
 interface VitalChartProps {
-  readings: VitalReading[];
+  readings: VitalReading[]
 }
 
 const VitalChart: React.FC<VitalChartProps> = ({ readings }) => {
-  // Simple chart implementation using CSS and divs
-  const chartData = readings.slice(0, 7).reverse(); // Last 7 readings
-  
-  const getChartValue = (reading: VitalReading) => {
-    switch (reading.type) {
-      case 'blood_pressure':
-        // Extract systolic value for chart
-        const systolic = parseInt(reading.value.split('/')[0]);
-        return Math.min(Math.max((systolic - 80) / 80 * 100, 10), 100);
-      case 'blood_sugar':
-        const sugar = parseInt(reading.value);
-        return Math.min(Math.max((sugar - 70) / 100 * 100, 10), 100);
-      case 'heart_rate':
-        const hr = parseInt(reading.value);
-        return Math.min(Math.max((hr - 50) / 50 * 100, 10), 100);
-      default:
-        return 50;
-    }
-  };
+  // Get last 7 days of readings
+  const last7Days = readings.slice(0, 7).reverse()
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'normal':
-        return 'bg-green-500';
-      case 'warning':
-        return 'bg-yellow-500';
-      case 'critical':
-        return 'bg-red-500';
-      default:
-        return 'bg-gray-500';
-    }
-  };
+  // Prepare data for different vital types
+  const heartRateData = last7Days
+    .filter(r => r.type === 'heart_rate')
+    .map(r => ({
+      x: new Date(r.created_at).toLocaleDateString(),
+      y: parseInt(r.value)
+    }))
 
-  if (chartData.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-64 text-gray-500">
-        <div className="text-center">
-          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            📊
-          </div>
-          <p>No data available for chart</p>
-        </div>
-      </div>
-    );
+  const bloodSugarData = last7Days
+    .filter(r => r.type === 'blood_sugar')
+    .map(r => ({
+      x: new Date(r.created_at).toLocaleDateString(),
+      y: parseInt(r.value)
+    }))
+
+  const systolicData = last7Days
+    .filter(r => r.type === 'blood_pressure')
+    .map(r => ({
+      x: new Date(r.created_at).toLocaleDateString(),
+      y: parseInt(r.value.split('/')[0])
+    }))
+
+  const temperatureData = last7Days
+    .filter(r => r.type === 'temperature')
+    .map(r => ({
+      x: new Date(r.created_at).toLocaleDateString(),
+      y: parseFloat(r.value)
+    }))
+
+  const data = {
+    datasets: [
+      {
+        label: 'Heart Rate (BPM)',
+        data: heartRateData,
+        borderColor: 'rgb(239, 68, 68)',
+        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+        tension: 0.4,
+      },
+      {
+        label: 'Blood Sugar (mg/dL)',
+        data: bloodSugarData,
+        borderColor: 'rgb(59, 130, 246)',
+        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+        tension: 0.4,
+      },
+      {
+        label: 'Systolic BP (mmHg)',
+        data: systolicData,
+        borderColor: 'rgb(16, 185, 129)',
+        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+        tension: 0.4,
+      },
+      {
+        label: 'Temperature (°F)',
+        data: temperatureData,
+        borderColor: 'rgb(245, 158, 11)',
+        backgroundColor: 'rgba(245, 158, 11, 0.1)',
+        tension: 0.4,
+      },
+    ],
   }
 
-  return (
-    <div className="h-64">
-      <div className="flex items-end justify-between h-48 px-4 py-2 bg-gray-50 rounded-lg">
-        {chartData.map((reading, index) => {
-          const height = getChartValue(reading);
-          return (
-            <div key={reading.id} className="flex flex-col items-center space-y-2">
-              <div className="text-xs text-gray-600 font-medium">
-                {reading.value}
-              </div>
-              <div
-                className={`w-8 rounded-t transition-all duration-300 hover:opacity-80 ${getStatusColor(reading.status)}`}
-                style={{ height: `${height}%` }}
-                title={`${reading.type}: ${reading.value} - ${reading.status}`}
-              />
-              <div className="text-xs text-gray-500">
-                {reading.timestamp.toLocaleDateString('en-US', { 
-                  month: 'short', 
-                  day: 'numeric' 
-                })}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      
-      <div className="mt-4 flex justify-center space-x-6 text-sm">
-        <div className="flex items-center space-x-2">
-          <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-          <span className="text-gray-600">Normal</span>
-        </div>
-        <div className="flex items-center space-x-2">
-          <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
-          <span className="text-gray-600">Warning</span>
-        </div>
-        <div className="flex items-center space-x-2">
-          <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-          <span className="text-gray-600">Critical</span>
-        </div>
-      </div>
-    </div>
-  );
-};
+  const options = {
+    responsive: true,
+    plugins: {
+      legend: {
+        position: 'top' as const,
+      },
+      title: {
+        display: false,
+      },
+    },
+    scales: {
+      y: {
+        beginAtZero: false,
+      },
+    },
+  }
 
-export default VitalChart;
+  if (last7Days.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-64 text-gray-500">
+        No data available for chart
+      </div>
+    )
+  }
+
+  return <Line data={data} options={options} />
+}
+
+export default VitalChart

@@ -8,9 +8,12 @@ import {
   AlertTriangle,
   CheckCircle,
   Clock,
-  BarChart3
+  BarChart3,
+  LogOut,
+  User
 } from 'lucide-react';
 import VitalChart from './VitalChart';
+import { useAuth } from '../contexts/AuthContext';
 
 interface VitalReading {
   id: string;
@@ -21,6 +24,7 @@ interface VitalReading {
 }
 
 const PatientDashboard: React.FC = () => {
+  const { user, profile, signOut } = useAuth();
   const [readings, setReadings] = useState<VitalReading[]>([
     {
       id: '1',
@@ -170,9 +174,28 @@ const PatientDashboard: React.FC = () => {
     <div className="min-h-screen bg-gray-50 p-4 lg:p-8">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Patient Dashboard</h1>
-          <p className="text-gray-600">Track your vital signs and monitor your health progress</p>
+        <div className="mb-8 bg-white rounded-lg shadow-sm p-6">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900 mb-2">
+                Welcome back, {profile?.full_name || user?.email?.split('@')[0]}! 👋
+              </h1>
+              <p className="text-gray-600">Track your vital signs and monitor your health progress</p>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3 text-sm text-gray-600">
+                <User className="h-4 w-4" />
+                <span>{user?.email}</span>
+              </div>
+              <button
+                onClick={signOut}
+                className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-200"
+              >
+                <LogOut className="h-4 w-4" />
+                <span className="hidden sm:inline">Sign Out</span>
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* Quick Stats */}
@@ -343,7 +366,16 @@ const PatientDashboard: React.FC = () => {
               <h2 className="text-xl font-semibold text-gray-900">7-Day Trends</h2>
             </div>
             <div className="p-6">
-              <VitalChart readings={readings} />
+              <VitalChart
+                readings={readings.map(r => ({
+                  id: r.id,
+                  user_id: 'demo-user', // or replace with actual user id if available
+                  type: r.type,
+                  value: r.value,
+                  status: r.status,
+                  created_at: r.timestamp.toISOString()
+                }))}
+              />
             </div>
           </div>
         </div>
