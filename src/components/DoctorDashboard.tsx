@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Users, 
   AlertTriangle, 
@@ -14,21 +14,24 @@ import {
   CheckCircle,
   XCircle,
   LogOut,
-  User
+  User,
+  Loader2
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { doctorPatientService, vitalReadingsService, profilesService } from '../lib/database';
+import toast from 'react-hot-toast';
 
-interface Patient {
+interface PatientWithVitals {
   id: string;
   name: string;
-  age: number;
-  condition: string;
-  lastReading: Date;
+  email: string;
+  lastReading?: Date;
   status: 'normal' | 'warning' | 'critical';
-  vitals: {
-    bloodPressure: string;
-    bloodSugar: string;
-    heartRate: string;
+  latestVitals?: {
+    bloodPressure?: string;
+    bloodSugar?: string;
+    heartRate?: string;
+    temperature?: string;
   };
 }
 
@@ -36,8 +39,74 @@ const DoctorDashboard: React.FC = () => {
   const { user, profile, signOut } = useAuth();
   const [selectedFilter, setSelectedFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
+  const [patients, setPatients] = useState<PatientWithVitals[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const patients: Patient[] = [
+  // Load patients and their latest vitals
+  useEffect(() => {
+    if (user?.id && profile?.role === 'doctor') {
+      loadPatientsData();
+    }
+  }, [user?.id, profile?.role]);
+
+  const loadPatientsData = async () => {
+    if (!user?.id) return;
+    
+    try {
+      setLoading(true);
+      
+      // Get all patients assigned to this doctor
+      const patientRelationships = await doctorPatientService.getPatientsByDoctorId(user.id);
+      
+      // Get patient details and latest vitals for each patient
+      const patientPromises = patientRelationships.map(async (relationship) => {
+        if (!relationship.patient) return null;
+        
+        // Get latest vital readings for this patient
+        const vitals = await vitalReadingsService.getByUserId(relationship.patient.id, 5);
+        
+        // Calculate overall status based on latest readings
+        const latestStatus = vitals.length > 0 ? 
+          vitals.find(v => v.status === 'critical')?.status ||
+          vitals.find(v => v.status === 'warning')?.status ||
+          'normal' : 'normal';
+        
+        // Extract latest vital values
+        const latestVitals: PatientWithVitals['latestVitals'] = {};
+        vitals.forEach(vital => {
+          if (vital.type === 'blood_pressure' && !latestVitals.bloodPressure) {
+            latestVitals.bloodPressure = vital.value;
+          } else if (vital.type === 'blood_sugar' && !latestVitals.bloodSugar) {
+            latestVitals.bloodSugar = vital.value;
+          } else if (vital.type === 'heart_rate' && !latestVitals.heartRate) {
+            latestVitals.heartRate = vital.value;
+          } else if (vital.type === 'temperature' && !latestVitals.temperature) {
+            latestVitals.temperature = vital.value;
+          }
+        });
+        
+        return {
+          id: relationship.patient.id,
+          name: relationship.patient.full_name,
+          email: relationship.patient.email,
+          lastReading: vitals.length > 0 ? new Date(vitals[0].recorded_at || vitals[0].created_at) : undefined,
+          status: latestStatus as 'normal' | 'warning' | 'critical',
+          latestVitals
+        };
+      });
+      
+      const patientsData = (await Promise.all(patientPromises)).filter(Boolean) as PatientWithVitals[];
+      setPatients(patientsData);
+    } catch (error) {
+      console.error('Error loading patients data:', error);
+      toast.error('Failed to load patients data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Static data for demo (fallback)
+  const staticPatients: PatientWithVitals[] = [
     {
       id: '1',
       name: 'John Smith',

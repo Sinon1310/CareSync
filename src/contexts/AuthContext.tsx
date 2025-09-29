@@ -16,7 +16,7 @@ interface AuthContextType {
   signUp: (email: string, password: string, fullName: string, role: 'patient' | 'doctor') => Promise<{ error: any }>
   signInWithGoogle: () => Promise<void>
   signOut: () => Promise<void>
-  createProfileForGoogleUser: (role: 'patient' | 'doctor') => Promise<void>
+  createProfileForGoogleUser: (role: 'patient' | 'doctor') => Promise<{ success: boolean; role: 'patient' | 'doctor' }>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -69,17 +69,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       async (event, session) => {
         console.log('Auth state changed:', event, session?.user?.email || 'No user')
         setUser(session?.user ?? null)
+        
         if (session?.user) {
-          const profileExists = await fetchProfile(session.user.id)
+          // Check if we're in Google auth flow
+          const isGoogleAuthFlow = localStorage.getItem('googleAuthInProgress') === 'true';
+          const profileExists = await fetchProfile(session.user.id);
           
-          // If user signed in and no profile exists, show role selection
-          if (!profileExists && event === 'SIGNED_IN') {
-            setShowRoleSelection(true)
+          if (isGoogleAuthFlow && event === 'SIGNED_IN') {
+            // If Google auth flow and just signed in
+            localStorage.removeItem('googleAuthInProgress');
+            
+            if (!profileExists) {
+              // If no profile exists, show role selection modal
+              setShowRoleSelection(true);
+            }
+            // Profile exists, the redirect in App.tsx will handle navigation
+          } 
+          else if (!profileExists && event === 'SIGNED_IN') {
+            // Non-Google auth but no profile
+            setShowRoleSelection(true);
           }
         } else {
-          setProfile(null)
-          setShowRoleSelection(false)
-          setLoading(false)
+          setProfile(null);
+          setShowRoleSelection(false);
+          setLoading(false);
+          localStorage.removeItem('googleAuthInProgress');
         }
       }
     )
@@ -163,10 +177,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signInWithGoogle = async () => {
     try {
+      // Store a flag in localStorage to indicate we're in Google auth flow
+      localStorage.setItem('googleAuthInProgress', 'true');
+      
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}`,
+          // Use a specific route for redirect to handle Google auth completion
+          redirectTo: `${window.location.origin}/auth/callback`,
           queryParams: {
             access_type: 'offline',
             prompt: 'consent',
@@ -175,6 +193,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       })
       if (error) throw error
     } catch (error) {
+      localStorage.removeItem('googleAuthInProgress');
       console.error('Error signing in with Google:', error)
       throw error
     }
@@ -187,23 +206,51 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const createProfileForGoogleUser = async (role: 'patient' | 'doctor') => {
     if (!user) throw new Error('No user found')
     
+    console.log('Creating profile for Google user:', {
+      userId: user.id,
+      email: user.email,
+      role: role
+    })
+    
     try {
-      const { error } = await supabase
+      // Check if profile already exists
+      const { data: existingProfile } = await supabase
         .from('profiles')
-        .insert({
-          id: user.id,
-          email: user.email || '',
-          full_name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
-          role,
-        })
-
-      if (error) throw error
+        .select('*')
+        .eq('id', user.id)
+        .single()
+        
+      if (existingProfile) {
+        console.log('Profile already exists, updating role:', role)
+        // Update existing profile
+        const { error } = await supabase
+          .from('profiles')
+          .update({ role: role })
+          .eq('id', user.id)
+          
+        if (error) throw error
+      } else {
+        // Insert new profile
+        const { error } = await supabase
+          .from('profiles')
+          .insert({
+            id: user.id,
+            email: user.email || '',
+            full_name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
+            role,
+          })
+  
+        if (error) throw error
+      }
       
       // Refresh profile
       await fetchProfile(user.id)
       setShowRoleSelection(false)
+      
+      // Return success
+      return { success: true, role }
     } catch (error) {
-      console.error('Error creating profile:', error)
+      console.error('Error creating/updating profile:', error)
       throw error
     }
   }

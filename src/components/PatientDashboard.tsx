@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Activity, 
   Heart, 
@@ -10,14 +10,18 @@ import {
   Clock,
   BarChart3,
   LogOut,
-  User
+  User,
+  Loader2
 } from 'lucide-react';
 import VitalChart from './VitalChart';
+import MedicationTracker from './MedicationTracker';
 import { useAuth } from '../contexts/AuthContext';
+import { vitalReadingsService } from '../lib/database';
+import toast from 'react-hot-toast';
 
 interface VitalReading {
   id: string;
-  type: 'blood_pressure' | 'blood_sugar' | 'heart_rate';
+  type: 'blood_pressure' | 'blood_sugar' | 'heart_rate' | 'temperature';
   value: string;
   timestamp: Date;
   status: 'normal' | 'warning' | 'critical';
@@ -25,29 +29,9 @@ interface VitalReading {
 
 const PatientDashboard: React.FC = () => {
   const { user, profile, signOut } = useAuth();
-  const [readings, setReadings] = useState<VitalReading[]>([
-    {
-      id: '1',
-      type: 'blood_pressure',
-      value: '120/80',
-      timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000),
-      status: 'normal'
-    },
-    {
-      id: '2',
-      type: 'blood_sugar',
-      value: '95',
-      timestamp: new Date(Date.now() - 4 * 60 * 60 * 1000),
-      status: 'normal'
-    },
-    {
-      id: '3',
-      type: 'heart_rate',
-      value: '72',
-      timestamp: new Date(Date.now() - 6 * 60 * 60 * 1000),
-      status: 'normal'
-    }
-  ]);
+  const [readings, setReadings] = useState<VitalReading[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
 
   const [newReading, setNewReading] = useState<{
     type: VitalReading['type'];
@@ -55,51 +39,161 @@ const PatientDashboard: React.FC = () => {
     diastolic: string;
     bloodSugar: string;
     heartRate: string;
+    temperature: string;
   }>({
     type: 'blood_pressure',
     systolic: '',
     diastolic: '',
     bloodSugar: '',
-    heartRate: ''
+    heartRate: '',
+    temperature: ''
   });
 
   const [showAddForm, setShowAddForm] = useState(false);
 
-  const handleSubmitReading = (e: React.FormEvent) => {
+  // Load vital readings from database
+  useEffect(() => {
+    if (user?.id) {
+      loadVitalReadings();
+    }
+  }, [user?.id]);
+
+  const loadVitalReadings = async () => {
+    if (!user?.id) return;
+    
+    try {
+      setLoading(true);
+      const dbReadings = await vitalReadingsService.getByUserId(user.id);
+      
+      // Convert database format to component format
+      const formattedReadings: VitalReading[] = dbReadings.map(reading => ({
+        id: reading.id,
+        type: reading.type as VitalReading['type'],
+        value: reading.value,
+        timestamp: new Date(reading.recorded_at || reading.created_at),
+        status: reading.status
+      }));
+      
+      setReadings(formattedReadings);
+    } catch (error) {
+      console.error('Error loading vital readings:', error);
+      toast.error('Failed to load your health data. Please refresh the page.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSubmitReading = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    if (!user?.id || submitting) return;
+
     let value = '';
     let type: VitalReading['type'] = newReading.type;
+    let systolic: number | undefined;
+    let diastolic: number | undefined;
     
     if (newReading.type === 'blood_pressure') {
+      if (!newReading.systolic || !newReading.diastolic) return;
       value = `${newReading.systolic}/${newReading.diastolic}`;
+      systolic = parseInt(newReading.systolic);
+      diastolic = parseInt(newReading.diastolic);
     } else if (newReading.type === 'blood_sugar') {
+      if (!newReading.bloodSugar) return;
       value = newReading.bloodSugar;
       type = 'blood_sugar';
     } else if (newReading.type === 'heart_rate') {
+      if (!newReading.heartRate) return;
       value = newReading.heartRate;
       type = 'heart_rate';
+    } else if (newReading.type === 'temperature') {
+      if (!newReading.temperature) return;
+      value = newReading.temperature;
+      type = 'temperature';
     }
 
-    if (value) {
-      const reading: VitalReading = {
-        id: Date.now().toString(),
-        type,
-        value,
-        timestamp: new Date(),
-        status: 'normal' // In real app, this would be calculated based on normal ranges
+    if (!value) return;
+
+    try {
+      setSubmitting(true);
+      
+      // Calculate status based on normal ranges
+      const status = calculateVitalStatus(type, value, systolic, diastolic);
+      
+      // Save to database
+      const readingData = {
+        user_id: user.id,
+        type: type,
+        value: value,
+        systolic: systolic,
+        diastolic: diastolic,
+        status: status,
+        recorded_at: new Date().toISOString()
+      };
+      
+      console.log('Saving reading:', readingData);
+      const dbReading = await vitalReadingsService.create(readingData);
+
+      // Add to local state
+      const newVitalReading: VitalReading = {
+        id: dbReading.id,
+        type: type,
+        value: value,
+        timestamp: new Date(dbReading.recorded_at || dbReading.created_at),
+        status: status
       };
 
-      setReadings([reading, ...readings]);
+      setReadings([newVitalReading, ...readings]);
       setNewReading({
         type: 'blood_pressure',
         systolic: '',
         diastolic: '',
         bloodSugar: '',
-        heartRate: ''
+        heartRate: '',
+        temperature: ''
       });
       setShowAddForm(false);
+      toast.success('Reading saved successfully!');
+    } catch (error) {
+      console.error('Error saving vital reading:', error);
+      toast.error('Failed to save reading. Please try again.');
+    } finally {
+      setSubmitting(false);
     }
+  };
+
+  // Helper function to calculate vital status
+  const calculateVitalStatus = (
+    type: VitalReading['type'], 
+    value: string, 
+    systolic?: number, 
+    diastolic?: number
+  ): 'normal' | 'warning' | 'critical' => {
+    switch (type) {
+      case 'blood_pressure':
+        if (systolic && diastolic) {
+          if (systolic >= 180 || diastolic >= 120) return 'critical';
+          if (systolic >= 140 || diastolic >= 90) return 'warning';
+          return 'normal';
+        }
+        break;
+      case 'blood_sugar':
+        const sugar = parseInt(value);
+        if (sugar >= 250 || sugar <= 50) return 'critical';
+        if (sugar >= 180 || sugar <= 70) return 'warning';
+        return 'normal';
+      case 'heart_rate':
+        const hr = parseInt(value);
+        if (hr >= 120 || hr <= 50) return 'critical';
+        if (hr >= 100 || hr <= 60) return 'warning';
+        return 'normal';
+      case 'temperature':
+        const temp = parseFloat(value);
+        if (temp >= 103 || temp <= 95) return 'critical';
+        if (temp >= 100.4 || temp <= 97) return 'warning';
+        return 'normal';
+    }
+    return 'normal';
   };
 
   const getVitalIcon = (type: VitalReading['type']) => {
@@ -110,6 +204,8 @@ const PatientDashboard: React.FC = () => {
         return Droplet;
       case 'heart_rate':
         return Heart;
+      case 'temperature':
+        return TrendingUp;
       default:
         return Activity;
     }
@@ -123,6 +219,8 @@ const PatientDashboard: React.FC = () => {
         return 'Blood Sugar';
       case 'heart_rate':
         return 'Heart Rate';
+      case 'temperature':
+        return 'Temperature';
       default:
         return 'Unknown';
     }
@@ -136,6 +234,8 @@ const PatientDashboard: React.FC = () => {
         return 'mg/dL';
       case 'heart_rate':
         return 'BPM';
+      case 'temperature':
+        return '°F';
       default:
         return '';
     }
@@ -173,6 +273,15 @@ const PatientDashboard: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-50 p-4 lg:p-8">
       <div className="max-w-7xl mx-auto">
+        {loading ? (
+          <div className="flex items-center justify-center min-h-96">
+            <div className="text-center">
+              <Loader2 className="h-8 w-8 animate-spin text-blue-600 mx-auto mb-4" />
+              <p className="text-gray-600">Loading your health data...</p>
+            </div>
+          </div>
+        ) : (
+          <>
         {/* Header */}
         <div className="mb-8 bg-white rounded-lg shadow-sm p-6">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -274,6 +383,7 @@ const PatientDashboard: React.FC = () => {
                       <option value="blood_pressure">Blood Pressure</option>
                       <option value="blood_sugar">Blood Sugar</option>
                       <option value="heart_rate">Heart Rate</option>
+                      <option value="temperature">Temperature</option>
                     </select>
                   </div>
 
@@ -340,12 +450,37 @@ const PatientDashboard: React.FC = () => {
                     </div>
                   )}
 
+                  {newReading.type === 'temperature' && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Temperature (°F)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        value={newReading.temperature}
+                        onChange={(e) => setNewReading({...newReading, temperature: e.target.value})}
+                        placeholder="98.6"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        required
+                      />
+                    </div>
+                  )}
+
                   <div className="flex space-x-4">
                     <button
                       type="submit"
-                      className="flex-1 py-2 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200"
+                      disabled={submitting}
+                      className="flex-1 py-2 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 flex items-center justify-center gap-2"
                     >
-                      Save Reading
+                      {submitting ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Saving...
+                        </>
+                      ) : (
+                        'Save Reading'
+                      )}
                     </button>
                     <button
                       type="button"
@@ -369,15 +504,21 @@ const PatientDashboard: React.FC = () => {
               <VitalChart
                 readings={readings.map(r => ({
                   id: r.id,
-                  user_id: 'demo-user', // or replace with actual user id if available
+                  user_id: user?.id || '',
                   type: r.type,
                   value: r.value,
                   status: r.status,
+                  recorded_at: r.timestamp.toISOString(),
                   created_at: r.timestamp.toISOString()
                 }))}
               />
             </div>
           </div>
+        </div>
+
+        {/* Medications Section */}
+        <div className="mb-8">
+          <MedicationTracker />
         </div>
 
         {/* Recent Readings */}
@@ -433,6 +574,8 @@ const PatientDashboard: React.FC = () => {
             )}
           </div>
         </div>
+        </>
+        )}
       </div>
     </div>
   );

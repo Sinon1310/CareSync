@@ -34,28 +34,28 @@ const VitalChart: React.FC<VitalChartProps> = ({ readings }) => {
   const heartRateData = last7Days
     .filter(r => r.type === 'heart_rate')
     .map(r => ({
-      x: new Date(r.created_at).toLocaleDateString(),
+      x: new Date(r.recorded_at || r.created_at).toLocaleDateString(),
       y: parseInt(r.value)
     }))
 
   const bloodSugarData = last7Days
     .filter(r => r.type === 'blood_sugar')
     .map(r => ({
-      x: new Date(r.created_at).toLocaleDateString(),
+      x: new Date(r.recorded_at || r.created_at).toLocaleDateString(),
       y: parseInt(r.value)
     }))
 
   const systolicData = last7Days
     .filter(r => r.type === 'blood_pressure')
     .map(r => ({
-      x: new Date(r.created_at).toLocaleDateString(),
+      x: new Date(r.recorded_at || r.created_at).toLocaleDateString(),
       y: parseInt(r.value.split('/')[0])
     }))
 
   const temperatureData = last7Days
     .filter(r => r.type === 'temperature')
     .map(r => ({
-      x: new Date(r.created_at).toLocaleDateString(),
+      x: new Date(r.recorded_at || r.created_at).toLocaleDateString(),
       y: parseFloat(r.value)
     }))
 

@@ -40,7 +40,10 @@ export type Database = {
           user_id: string
           type: 'blood_pressure' | 'blood_sugar' | 'heart_rate' | 'temperature'
           value: string
+          systolic?: number
+          diastolic?: number
           status: 'normal' | 'warning' | 'critical'
+          recorded_at: string
           created_at: string
         }
         Insert: {
@@ -48,7 +51,10 @@ export type Database = {
           user_id: string
           type: 'blood_pressure' | 'blood_sugar' | 'heart_rate' | 'temperature'
           value: string
+          systolic?: number
+          diastolic?: number
           status?: 'normal' | 'warning' | 'critical'
+          recorded_at: string
           created_at?: string
         }
         Update: {
@@ -56,7 +62,10 @@ export type Database = {
           user_id?: string
           type?: 'blood_pressure' | 'blood_sugar' | 'heart_rate' | 'temperature'
           value?: string
+          systolic?: number
+          diastolic?: number
           status?: 'normal' | 'warning' | 'critical'
+          recorded_at?: string
           created_at?: string
         }
       }
@@ -106,6 +115,76 @@ export type Database = {
           content?: string
           sender_role?: 'patient' | 'doctor'
           sender_name?: string
+          created_at?: string
+        }
+      }
+      medications: {
+        Row: {
+          id: string
+          patient_id: string
+          prescribed_by: string | null
+          name: string
+          dosage: string
+          frequency: string
+          instructions: string | null
+          start_date: string
+          end_date: string | null
+          is_active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          patient_id: string
+          prescribed_by?: string | null
+          name: string
+          dosage: string
+          frequency: string
+          instructions?: string | null
+          start_date?: string
+          end_date?: string | null
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          patient_id?: string
+          prescribed_by?: string | null
+          name?: string
+          dosage?: string
+          frequency?: string
+          instructions?: string | null
+          start_date?: string
+          end_date?: string | null
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      medication_logs: {
+        Row: {
+          id: string
+          medication_id: string
+          patient_id: string
+          taken_at: string
+          notes: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          medication_id: string
+          patient_id: string
+          taken_at: string
+          notes?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          medication_id?: string
+          patient_id?: string
+          taken_at?: string
+          notes?: string | null
           created_at?: string
         }
       }

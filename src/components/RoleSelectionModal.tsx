@@ -22,7 +22,16 @@ const RoleSelectionModal: React.FC<RoleSelectionModalProps> = ({
     
     setLoading(true)
     try {
+      console.log('Submitting role selection:', selectedRole)
       await onRoleSelect(selectedRole)
+      
+      // Force navigation to the correct dashboard after role selection
+      // This helps with Google OAuth flow where the redirection might not happen automatically
+      if (selectedRole === 'patient') {
+        window.location.href = '/patient-dashboard'
+      } else {
+        window.location.href = '/doctor-dashboard'
+      }
     } catch (error) {
       console.error('Error selecting role:', error)
     } finally {
