@@ -32,6 +32,11 @@ const AppRoutes = () => {
 
   // Auto-redirect authenticated users to their dashboard
   const getRedirectElement = () => {
+    // Don't auto-redirect if we're waiting for role selection
+    if (user && !profile && showRoleSelection) {
+      return <LandingPage />
+    }
+    
     if (user && profile) {
       if (profile.role === 'patient') {
         return <Navigate to="/patient-dashboard" replace />

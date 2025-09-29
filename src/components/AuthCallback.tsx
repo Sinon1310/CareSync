@@ -3,7 +3,7 @@ import { Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
 const AuthCallback = () => {
-  const { user, profile, loading } = useAuth();
+  const { user, profile, loading, showRoleSelection } = useAuth();
 
   // Log information for debugging
   useEffect(() => {
@@ -11,10 +11,11 @@ const AuthCallback = () => {
       user: !!user,
       profile: !!profile,
       loading,
+      showRoleSelection,
       userEmail: user?.email,
       profileRole: profile?.role
     });
-  }, [user, profile, loading]);
+  }, [user, profile, loading, showRoleSelection]);
 
   if (loading) {
     return (
@@ -33,16 +34,19 @@ const AuthCallback = () => {
       ? '/patient-dashboard' 
       : '/doctor-dashboard';
     
+    console.log('Redirecting to:', redirectPath);
     return <Navigate to={redirectPath} replace />;
   }
 
-  // If we have a user but no profile, the role selection modal should be shown
-  // The modal is controlled by the AuthContext, so just go to home page
+  // If we have a user but no profile, and role selection is showing, go to home
+  // so the role selection modal can appear
   if (user && !profile) {
+    console.log('User exists but no profile, redirecting to home for role selection');
     return <Navigate to="/" replace />;
   }
 
   // If no user, redirect to landing page
+  console.log('No user found, redirecting to landing page');
   return <Navigate to="/" replace />;
 };
 

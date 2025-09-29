@@ -71,29 +71,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(session?.user ?? null)
         
         if (session?.user) {
-          // Check if we're in Google auth flow
-          const isGoogleAuthFlow = localStorage.getItem('googleAuthInProgress') === 'true';
           const profileExists = await fetchProfile(session.user.id);
           
-          if (isGoogleAuthFlow && event === 'SIGNED_IN') {
-            // If Google auth flow and just signed in
-            localStorage.removeItem('googleAuthInProgress');
-            
-            if (!profileExists) {
-              // If no profile exists, show role selection modal
-              setShowRoleSelection(true);
-            }
-            // Profile exists, the redirect in App.tsx will handle navigation
-          } 
-          else if (!profileExists && event === 'SIGNED_IN') {
-            // Non-Google auth but no profile
+          // If we have a user but no profile, show role selection
+          if (!profileExists) {
+            console.log('User logged in but no profile exists, showing role selection');
             setShowRoleSelection(true);
+            setLoading(false);
+          } else {
+            console.log('User logged in with existing profile, ready for dashboard');
+            setShowRoleSelection(false);
+            setLoading(false);
           }
         } else {
           setProfile(null);
           setShowRoleSelection(false);
           setLoading(false);
-          localStorage.removeItem('googleAuthInProgress');
         }
       }
     )
@@ -177,14 +170,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signInWithGoogle = async () => {
     try {
-      // Store a flag in localStorage to indicate we're in Google auth flow
-      localStorage.setItem('googleAuthInProgress', 'true');
-      
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          // Use a specific route for redirect to handle Google auth completion
-          redirectTo: `${window.location.origin}/auth/callback`,
+          redirectTo: `${window.location.origin}/`,
           queryParams: {
             access_type: 'offline',
             prompt: 'consent',
@@ -193,7 +182,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       })
       if (error) throw error
     } catch (error) {
-      localStorage.removeItem('googleAuthInProgress');
       console.error('Error signing in with Google:', error)
       throw error
     }

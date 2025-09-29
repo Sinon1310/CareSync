@@ -93,7 +93,7 @@ const MedicationTracker: React.FC = () => {
       loadMedications();
     } catch (error) {
       console.error('Error adding medication:', error);
-      toast.error('Failed to add medication');
+      toast.error('Failed to add medication: ' + (error as any)?.message);
     } finally {
       setSubmitting(false);
     }

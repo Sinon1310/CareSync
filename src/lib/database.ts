@@ -367,6 +367,7 @@ export const medicationsService = {
 
   // Add a new medication
   async create(medication: Omit<Medication, 'id' | 'created_at' | 'updated_at'>) {
+    console.log('Creating medication in DB:', medication);
     const { data, error } = await supabase
       .from('medications')
       .insert({
@@ -376,7 +377,12 @@ export const medicationsService = {
       .select()
       .single()
 
-    if (error) throw error
+    if (error) {
+      console.error('Supabase error creating medication:', error);
+      throw new Error(`Failed to save medication: ${error.message}`);
+    }
+    
+    console.log('Successfully created medication:', data);
     return data as Medication
   },
 
