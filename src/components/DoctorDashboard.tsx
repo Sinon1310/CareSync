@@ -3,10 +3,8 @@ import {
   Users, 
   AlertTriangle, 
   TrendingUp, 
-  Calendar,
   Search,
   Bell,
-  Filter,
   Activity,
   Heart,
   Droplet,
@@ -15,10 +13,11 @@ import {
   XCircle,
   LogOut,
   User,
-  Loader2
+  Loader2,
+  UserPlus
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { doctorPatientService, vitalReadingsService, profilesService } from '../lib/database';
+import { doctorPatientService, vitalReadingsService } from '../lib/database';
 import toast from 'react-hot-toast';
 
 interface PatientWithVitals {
@@ -37,12 +36,10 @@ interface PatientWithVitals {
 
 const DoctorDashboard: React.FC = () => {
   const { user, profile, signOut } = useAuth();
-  const [selectedFilter, setSelectedFilter] = useState('all');
-  const [searchTerm, setSearchTerm] = useState('');
   const [patients, setPatients] = useState<PatientWithVitals[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
 
-  // Load patients and their latest vitals
   useEffect(() => {
     if (user?.id && profile?.role === 'doctor') {
       loadPatientsData();
@@ -54,125 +51,83 @@ const DoctorDashboard: React.FC = () => {
     
     try {
       setLoading(true);
+      console.log('Loading patients for doctor:', user.id);
       
-      // Get all patients assigned to this doctor
-      const patientRelationships = await doctorPatientService.getPatientsByDoctorId(user.id);
-      
-      // Get patient details and latest vitals for each patient
-      const patientPromises = patientRelationships.map(async (relationship) => {
-        if (!relationship.patient) return null;
+      // Try to get patients from database
+      try {
+        const patientRelationships = await doctorPatientService.getPatientsByDoctorId(user.id);
+        console.log('Found patient relationships:', patientRelationships.length);
         
-        // Get latest vital readings for this patient
-        const vitals = await vitalReadingsService.getByUserId(relationship.patient.id, 5);
-        
-        // Calculate overall status based on latest readings
-        const latestStatus = vitals.length > 0 ? 
-          vitals.find(v => v.status === 'critical')?.status ||
-          vitals.find(v => v.status === 'warning')?.status ||
-          'normal' : 'normal';
-        
-        // Extract latest vital values
-        const latestVitals: PatientWithVitals['latestVitals'] = {};
-        vitals.forEach(vital => {
-          if (vital.type === 'blood_pressure' && !latestVitals.bloodPressure) {
-            latestVitals.bloodPressure = vital.value;
-          } else if (vital.type === 'blood_sugar' && !latestVitals.bloodSugar) {
-            latestVitals.bloodSugar = vital.value;
-          } else if (vital.type === 'heart_rate' && !latestVitals.heartRate) {
-            latestVitals.heartRate = vital.value;
-          } else if (vital.type === 'temperature' && !latestVitals.temperature) {
-            latestVitals.temperature = vital.value;
+        if (patientRelationships.length === 0) {
+          setPatients([]);
+          return;
+        }
+
+        // Process patient data if relationships exist
+        const patientPromises = patientRelationships.map(async (relationship) => {
+          if (!relationship.patient) return null;
+          
+          try {
+            const vitals = await vitalReadingsService.getByUserId(relationship.patient.id, 5);
+            
+            const latestStatus = vitals.length > 0 ? 
+              vitals.find(v => v.status === 'critical')?.status ||
+              vitals.find(v => v.status === 'warning')?.status ||
+              'normal' : 'normal';
+            
+            const latestVitals: PatientWithVitals['latestVitals'] = {};
+            vitals.forEach(vital => {
+              if (vital.type === 'blood_pressure' && !latestVitals.bloodPressure) {
+                latestVitals.bloodPressure = vital.value;
+              } else if (vital.type === 'blood_sugar' && !latestVitals.bloodSugar) {
+                latestVitals.bloodSugar = vital.value;
+              } else if (vital.type === 'heart_rate' && !latestVitals.heartRate) {
+                latestVitals.heartRate = vital.value;
+              } else if (vital.type === 'temperature' && !latestVitals.temperature) {
+                latestVitals.temperature = vital.value;
+              }
+            });
+            
+            return {
+              id: relationship.patient.id,
+              name: relationship.patient.full_name,
+              email: relationship.patient.email,
+              lastReading: vitals.length > 0 ? new Date(vitals[0].recorded_at || vitals[0].created_at) : undefined,
+              status: latestStatus as 'normal' | 'warning' | 'critical',
+              latestVitals
+            };
+          } catch (error) {
+            console.error('Error loading vitals for patient:', relationship.patient.id, error);
+            return {
+              id: relationship.patient.id,
+              name: relationship.patient.full_name,
+              email: relationship.patient.email,
+              status: 'normal' as const,
+              latestVitals: {}
+            };
           }
         });
         
-        return {
-          id: relationship.patient.id,
-          name: relationship.patient.full_name,
-          email: relationship.patient.email,
-          lastReading: vitals.length > 0 ? new Date(vitals[0].recorded_at || vitals[0].created_at) : undefined,
-          status: latestStatus as 'normal' | 'warning' | 'critical',
-          latestVitals
-        };
-      });
+        const patientsData = (await Promise.all(patientPromises)).filter(Boolean) as PatientWithVitals[];
+        setPatients(patientsData);
+        
+      } catch (error) {
+        console.log('Doctor-patient relationships table not set up yet. Please run setup-doctor-relationships.sql');
+        setPatients([]);
+      }
       
-      const patientsData = (await Promise.all(patientPromises)).filter(Boolean) as PatientWithVitals[];
-      setPatients(patientsData);
     } catch (error) {
-      console.error('Error loading patients data:', error);
-      toast.error('Failed to load patients data');
+      console.error('Error loading patients:', error);
+      toast.error('Failed to load patients');
     } finally {
       setLoading(false);
     }
   };
 
-  // Static data for demo (fallback)
-  const staticPatients: PatientWithVitals[] = [
-    {
-      id: '1',
-      name: 'John Smith',
-      age: 65,
-      condition: 'Hypertension',
-      lastReading: new Date(Date.now() - 30 * 60 * 1000),
-      status: 'warning',
-      vitals: {
-        bloodPressure: '145/92',
-        bloodSugar: '110',
-        heartRate: '78'
-      }
-    },
-    {
-      id: '2',
-      name: 'Maria Garcia',
-      age: 58,
-      condition: 'Type 2 Diabetes',
-      lastReading: new Date(Date.now() - 2 * 60 * 60 * 1000),
-      status: 'normal',
-      vitals: {
-        bloodPressure: '118/75',
-        bloodSugar: '95',
-        heartRate: '68'
-      }
-    },
-    {
-      id: '3',
-      name: 'Robert Johnson',
-      age: 72,
-      condition: 'Heart Disease',
-      lastReading: new Date(Date.now() - 45 * 60 * 1000),
-      status: 'critical',
-      vitals: {
-        bloodPressure: '160/100',
-        bloodSugar: '180',
-        heartRate: '95'
-      }
-    },
-    {
-      id: '4',
-      name: 'Sarah Wilson',
-      age: 45,
-      condition: 'Pre-diabetes',
-      lastReading: new Date(Date.now() - 4 * 60 * 60 * 1000),
-      status: 'normal',
-      vitals: {
-        bloodPressure: '125/80',
-        bloodSugar: '105',
-        heartRate: '72'
-      }
-    },
-    {
-      id: '5',
-      name: 'Michael Brown',
-      age: 68,
-      condition: 'Hypertension, Diabetes',
-      lastReading: new Date(Date.now() - 8 * 60 * 60 * 1000),
-      status: 'warning',
-      vitals: {
-        bloodPressure: '140/88',
-        bloodSugar: '130',
-        heartRate: '82'
-      }
-    }
-  ];
+  const filteredPatients = patients.filter(patient =>
+    patient.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    patient.email.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -200,204 +155,190 @@ const DoctorDashboard: React.FC = () => {
     }
   };
 
-  const filteredPatients = patients.filter(patient => {
-    const matchesSearch = patient.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         patient.condition.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    if (selectedFilter === 'all') return matchesSearch;
-    return matchesSearch && patient.status === selectedFilter;
-  });
-
-  const criticalPatients = patients.filter(p => p.status === 'critical').length;
-  const warningPatients = patients.filter(p => p.status === 'warning').length;
-  const normalPatients = patients.filter(p => p.status === 'normal').length;
-
-  const getTimeAgo = (date: Date) => {
-    const now = new Date();
-    const diffInMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60));
-    
-    if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
-    if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}h ago`;
-    return `${Math.floor(diffInMinutes / 1440)}d ago`;
-  };
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin text-blue-600 mx-auto mb-4" />
+          <p className="text-gray-600">Loading doctor dashboard...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 lg:p-8">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="mb-8 bg-white rounded-lg shadow-sm p-6">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">
-                Welcome, Dr. {profile?.full_name?.split(' ').pop() || user?.email?.split('@')[0]}! 👩‍⚕️
-              </h1>
-              <p className="text-gray-600">Monitor your patients' health status and vital signs</p>
-            </div>
-            <div className="mt-4 sm:mt-0 flex items-center space-x-4">
-              <div className="flex items-center gap-3 text-sm text-gray-600">
-                <User className="h-4 w-4" />
-                <span>{user?.email}</span>
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <div className="bg-white shadow-sm border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center py-4">
+            <div className="flex items-center space-x-4">
+              <div className="bg-blue-600 p-2 rounded-lg">
+                <User className="h-6 w-6 text-white" />
               </div>
-              <button className="relative p-2 bg-white rounded-lg shadow-sm border border-gray-200 hover:bg-gray-50">
-                <Bell className="h-5 w-5 text-gray-600" />
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                  {criticalPatients}
-                </span>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">Doctor Dashboard</h1>
+                <p className="text-gray-600">Welcome, Dr. {profile?.full_name}</p>
+              </div>
+            </div>
+            <div className="flex items-center space-x-4">
+              <button className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100">
+                <Bell className="h-5 w-5" />
               </button>
               <button
                 onClick={signOut}
-                className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-200"
+                className="flex items-center space-x-2 px-4 py-2 text-gray-700 hover:text-gray-900 rounded-lg hover:bg-gray-100"
               >
                 <LogOut className="h-4 w-4" />
-                <span className="hidden sm:inline">Sign Out</span>
+                <span>Sign Out</span>
               </button>
             </div>
           </div>
         </div>
+      </div>
 
-        {/* Overview Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-600 text-sm">Total Patients</p>
-                <p className="text-3xl font-bold text-gray-900">{patients.length}</p>
+      {/* Main Content */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        
+        {/* Stats Overview */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <div className="flex items-center">
+              <div className="bg-blue-100 p-3 rounded-lg">
+                <Users className="h-6 w-6 text-blue-600" />
               </div>
-              <Users className="h-8 w-8 text-blue-600" />
+              <div className="ml-4">
+                <h3 className="text-sm font-medium text-gray-500">Total Patients</h3>
+                <p className="text-2xl font-bold text-gray-900">{patients.length}</p>
+              </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-600 text-sm">Critical Alerts</p>
-                <p className="text-3xl font-bold text-red-600">{criticalPatients}</p>
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <div className="flex items-center">
+              <div className="bg-red-100 p-3 rounded-lg">
+                <AlertTriangle className="h-6 w-6 text-red-600" />
               </div>
-              <AlertTriangle className="h-8 w-8 text-red-600" />
+              <div className="ml-4">
+                <h3 className="text-sm font-medium text-gray-500">Critical</h3>
+                <p className="text-2xl font-bold text-gray-900">
+                  {patients.filter(p => p.status === 'critical').length}
+                </p>
+              </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-600 text-sm">Warnings</p>
-                <p className="text-3xl font-bold text-yellow-600">{warningPatients}</p>
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <div className="flex items-center">
+              <div className="bg-yellow-100 p-3 rounded-lg">
+                <TrendingUp className="h-6 w-6 text-yellow-600" />
               </div>
-              <AlertTriangle className="h-8 w-8 text-yellow-600" />
+              <div className="ml-4">
+                <h3 className="text-sm font-medium text-gray-500">Warning</h3>
+                <p className="text-2xl font-bold text-gray-900">
+                  {patients.filter(p => p.status === 'warning').length}
+                </p>
+              </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-600 text-sm">Normal Status</p>
-                <p className="text-3xl font-bold text-green-600">{normalPatients}</p>
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <div className="flex items-center">
+              <div className="bg-green-100 p-3 rounded-lg">
+                <Activity className="h-6 w-6 text-green-600" />
               </div>
-              <CheckCircle className="h-8 w-8 text-green-600" />
+              <div className="ml-4">
+                <h3 className="text-sm font-medium text-gray-500">Normal</h3>
+                <p className="text-2xl font-bold text-gray-900">
+                  {patients.filter(p => p.status === 'normal').length}
+                </p>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Critical Alerts Section */}
-        {criticalPatients > 0 && (
-          <div className="bg-red-50 border border-red-200 rounded-xl p-6 mb-8">
-            <div className="flex items-center mb-4">
-              <AlertTriangle className="h-6 w-6 text-red-600 mr-3" />
-              <h2 className="text-xl font-semibold text-red-900">Critical Alerts</h2>
-            </div>
-            <div className="space-y-3">
-              {patients.filter(p => p.status === 'critical').map((patient) => (
-                <div key={patient.id} className="bg-white rounded-lg p-4 border border-red-200">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="font-semibold text-gray-900">{patient.name}</h3>
-                      <p className="text-sm text-gray-600">{patient.condition}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-medium text-red-600">Blood Pressure: {patient.vitals.bloodPressure}</p>
-                      <p className="text-xs text-gray-500">Last reading: {getTimeAgo(patient.lastReading)}</p>
-                    </div>
-                  </div>
-                </div>
-              ))}
+        {/* Search and Filters */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-8">
+          <div className="flex items-center space-x-4">
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search patients by name or email..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
             </div>
           </div>
-        )}
+        </div>
 
-        {/* Filters and Search */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 mb-8">
-          <div className="p-6 border-b border-gray-100">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0">
-              <div className="flex items-center space-x-4">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="Search patients..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10 pr-4 py-2 w-64 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center space-x-2">
-                <Filter className="h-4 w-4 text-gray-500" />
-                <select
-                  value={selectedFilter}
-                  onChange={(e) => setSelectedFilter(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="all">All Patients</option>
-                  <option value="critical">Critical</option>
-                  <option value="warning">Warning</option>
-                  <option value="normal">Normal</option>
-                </select>
-              </div>
+        {/* Patients List */}
+        {patients.length === 0 ? (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-12 text-center">
+            <UserPlus className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No Patients Assigned</h3>
+            <p className="text-gray-600 mb-4">
+              You don't have any patients assigned yet. Doctor-patient relationships need to be set up.
+            </p>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 max-w-md mx-auto">
+              <p className="text-sm text-blue-800">
+                <strong>Next Steps:</strong><br />
+                1. Run the setup-doctor-relationships.sql script in Supabase<br />
+                2. Assign patients to your doctor account<br />
+                3. Patients will appear here once assigned
+              </p>
             </div>
           </div>
-
-          {/* Patient List */}
-          <div className="divide-y divide-gray-100">
+        ) : (
+          <div className="space-y-4">
             {filteredPatients.map((patient) => {
               const StatusIcon = getStatusIcon(patient.status);
               return (
-                <div key={patient.id} className="p-6 hover:bg-gray-50 transition-colors duration-200">
-                  <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
+                <div key={patient.id} className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                  <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-4">
-                      <div className="flex-shrink-0">
-                        <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                          <span className="text-blue-600 font-semibold text-lg">
-                            {patient.name.split(' ').map(n => n[0]).join('')}
-                          </span>
-                        </div>
+                      <div className="bg-gray-100 p-3 rounded-full">
+                        <User className="h-6 w-6 text-gray-600" />
                       </div>
                       <div>
                         <h3 className="text-lg font-semibold text-gray-900">{patient.name}</h3>
-                        <p className="text-gray-600">Age {patient.age} • {patient.condition}</p>
-                        <p className="text-sm text-gray-500">Last reading: {getTimeAgo(patient.lastReading)}</p>
+                        <p className="text-gray-600">{patient.email}</p>
+                        {patient.lastReading && (
+                          <p className="text-sm text-gray-500">
+                            Last reading: {patient.lastReading.toLocaleDateString()} at {patient.lastReading.toLocaleTimeString()}
+                          </p>
+                        )}
                       </div>
                     </div>
 
-                    <div className="flex flex-col sm:flex-row sm:items-center space-y-4 sm:space-y-0 sm:space-x-6">
-                      {/* Vital Signs */}
-                      <div className="grid grid-cols-3 gap-4 sm:gap-6">
-                        <div className="text-center">
-                          <Activity className="h-4 w-4 text-gray-400 mx-auto mb-1" />
-                          <p className="text-xs text-gray-500">BP</p>
-                          <p className="font-semibold text-gray-900">{patient.vitals.bloodPressure}</p>
+                    <div className="flex items-center space-x-6">
+                      {/* Vitals */}
+                      {patient.latestVitals && Object.keys(patient.latestVitals).length > 0 && (
+                        <div className="flex space-x-4">
+                          {patient.latestVitals.bloodPressure && (
+                            <div className="text-center">
+                              <Activity className="h-4 w-4 text-gray-400 mx-auto mb-1" />
+                              <p className="text-xs text-gray-500">BP</p>
+                              <p className="font-semibold text-gray-900">{patient.latestVitals.bloodPressure}</p>
+                            </div>
+                          )}
+                          {patient.latestVitals.bloodSugar && (
+                            <div className="text-center">
+                              <Droplet className="h-4 w-4 text-gray-400 mx-auto mb-1" />
+                              <p className="text-xs text-gray-500">Sugar</p>
+                              <p className="font-semibold text-gray-900">{patient.latestVitals.bloodSugar}</p>
+                            </div>
+                          )}
+                          {patient.latestVitals.heartRate && (
+                            <div className="text-center">
+                              <Heart className="h-4 w-4 text-gray-400 mx-auto mb-1" />
+                              <p className="text-xs text-gray-500">HR</p>
+                              <p className="font-semibold text-gray-900">{patient.latestVitals.heartRate}</p>
+                            </div>
+                          )}
                         </div>
-                        <div className="text-center">
-                          <Droplet className="h-4 w-4 text-gray-400 mx-auto mb-1" />
-                          <p className="text-xs text-gray-500">Sugar</p>
-                          <p className="font-semibold text-gray-900">{patient.vitals.bloodSugar}</p>
-                        </div>
-                        <div className="text-center">
-                          <Heart className="h-4 w-4 text-gray-400 mx-auto mb-1" />
-                          <p className="text-xs text-gray-500">HR</p>
-                          <p className="font-semibold text-gray-900">{patient.vitals.heartRate}</p>
-                        </div>
-                      </div>
+                      )}
 
                       {/* Status Badge */}
                       <div className={`inline-flex items-center px-3 py-2 rounded-full text-sm font-medium border ${getStatusColor(patient.status)}`}>
@@ -415,12 +356,12 @@ const DoctorDashboard: React.FC = () => {
               );
             })}
           </div>
-        </div>
+        )}
 
-        {filteredPatients.length === 0 && (
+        {filteredPatients.length === 0 && patients.length > 0 && (
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-12 text-center">
-            <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <p className="text-gray-600">No patients found matching your criteria</p>
+            <Search className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+            <p className="text-gray-600">No patients found matching "{searchTerm}"</p>
           </div>
         )}
       </div>
