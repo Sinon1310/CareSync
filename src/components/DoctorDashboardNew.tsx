@@ -3,6 +3,7 @@ import {
   Users, 
   AlertTriangle, 
   TrendingUp, 
+  Calendar,
   Search,
   Bell,
   Activity,
@@ -19,10 +20,6 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { doctorPatientService, vitalReadingsService } from '../lib/database';
 import toast from 'react-hot-toast';
-import PatientDetailModal from './PatientDetailModal';
-import AlertSystem from './AlertSystem';
-import AnalyticsDashboard from './AnalyticsDashboard';
-import QuickActions from './QuickActions';
 
 interface PatientWithVitals {
   id: string;
@@ -43,8 +40,6 @@ const DoctorDashboard: React.FC = () => {
   const [patients, setPatients] = useState<PatientWithVitals[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedPatient, setSelectedPatient] = useState<PatientWithVitals | null>(null);
-  const [showPatientModal, setShowPatientModal] = useState(false);
 
   useEffect(() => {
     if (user?.id && profile?.role === 'doctor') {
@@ -81,7 +76,6 @@ const DoctorDashboard: React.FC = () => {
               vitals.find(v => v.status === 'warning')?.status ||
               'normal' : 'normal';
             
-            // Get latest vitals for display
             const latestVitals: PatientWithVitals['latestVitals'] = {};
             vitals.forEach(vital => {
               if (vital.type === 'blood_pressure' && !latestVitals.bloodPressure) {
@@ -160,16 +154,6 @@ const DoctorDashboard: React.FC = () => {
       default:
         return Clock;
     }
-  };
-
-  const handleViewPatientDetails = (patient: PatientWithVitals) => {
-    setSelectedPatient(patient);
-    setShowPatientModal(true);
-  };
-
-  const handleClosePatientModal = () => {
-    setShowPatientModal(false);
-    setSelectedPatient(null);
   };
 
   if (loading) {
@@ -290,21 +274,6 @@ const DoctorDashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* Alert System */}
-        <div className="mb-8">
-          <AlertSystem patients={patients} />
-        </div>
-
-        {/* Analytics Dashboard */}
-        <div className="mb-8">
-          <AnalyticsDashboard patients={patients} />
-        </div>
-
-        {/* Quick Actions Panel */}
-        <div className="mb-8">
-          <QuickActions patients={patients} />
-        </div>
-
         {/* Patients List */}
         {patients.length === 0 ? (
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-12 text-center">
@@ -379,10 +348,7 @@ const DoctorDashboard: React.FC = () => {
                       </div>
 
                       {/* Action Button */}
-                      <button 
-                        onClick={() => handleViewPatientDetails(patient)}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200"
-                      >
+                      <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200">
                         View Details
                       </button>
                     </div>
@@ -400,15 +366,6 @@ const DoctorDashboard: React.FC = () => {
           </div>
         )}
       </div>
-
-      {/* Patient Detail Modal */}
-      {selectedPatient && (
-        <PatientDetailModal
-          patient={selectedPatient}
-          isOpen={showPatientModal}
-          onClose={handleClosePatientModal}
-        />
-      )}
     </div>
   );
 };
