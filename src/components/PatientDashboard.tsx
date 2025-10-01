@@ -18,6 +18,9 @@ import MedicationTracker from './MedicationTracker';
 import { useAuth } from '../contexts/AuthContext';
 import { vitalReadingsService } from '../lib/database';
 import toast from 'react-hot-toast';
+import { showSuccessToast, showErrorToast, showVitalSavedToast, showValidationErrorToast, showLoadingToast } from '../utils/toast';
+import LoadingSpinner from './LoadingSpinner';
+import ErrorBoundary from './ErrorBoundary';
 
 interface VitalReading {
   id: string;
@@ -77,7 +80,7 @@ const PatientDashboard: React.FC = () => {
       setReadings(formattedReadings);
     } catch (error) {
       console.error('Error loading vital readings:', error);
-      toast.error('Failed to load your health data. Please refresh the page.');
+      showErrorToast('Failed to load your health data. Please refresh the page.');
     } finally {
       setLoading(false);
     }
@@ -88,33 +91,69 @@ const PatientDashboard: React.FC = () => {
     
     if (!user?.id || submitting) return;
 
+    // Validation
     let value = '';
     let type: VitalReading['type'] = newReading.type;
     let systolic: number | undefined;
     let diastolic: number | undefined;
     
-    if (newReading.type === 'blood_pressure') {
-      if (!newReading.systolic || !newReading.diastolic) return;
-      value = `${newReading.systolic}/${newReading.diastolic}`;
-      systolic = parseInt(newReading.systolic);
-      diastolic = parseInt(newReading.diastolic);
-    } else if (newReading.type === 'blood_sugar') {
-      if (!newReading.bloodSugar) return;
-      value = newReading.bloodSugar;
-      type = 'blood_sugar';
-    } else if (newReading.type === 'heart_rate') {
-      if (!newReading.heartRate) return;
-      value = newReading.heartRate;
-      type = 'heart_rate';
-    } else if (newReading.type === 'temperature') {
-      if (!newReading.temperature) return;
-      value = newReading.temperature;
-      type = 'temperature';
-    }
-
-    if (!value) return;
-
     try {
+      if (newReading.type === 'blood_pressure') {
+        if (!newReading.systolic || !newReading.diastolic) {
+          showValidationErrorToast('blood pressure values');
+          return;
+        }
+        const sys = parseInt(newReading.systolic);
+        const dia = parseInt(newReading.diastolic);
+        
+        if (sys < 70 || sys > 250 || dia < 40 || dia > 150) {
+          showErrorToast('Blood pressure values seem unusual. Please double-check.');
+          return;
+        }
+        
+        value = `${sys}/${dia}`;
+        systolic = sys;
+        diastolic = dia;
+      } else if (newReading.type === 'blood_sugar') {
+        if (!newReading.bloodSugar) {
+          showValidationErrorToast('blood sugar value');
+          return;
+        }
+        const sugar = parseInt(newReading.bloodSugar);
+        if (sugar < 20 || sugar > 600) {
+          showErrorToast('Blood sugar value seems unusual. Please double-check.');
+          return;
+        }
+        value = newReading.bloodSugar;
+        type = 'blood_sugar';
+      } else if (newReading.type === 'heart_rate') {
+        if (!newReading.heartRate) {
+          showValidationErrorToast('heart rate value');
+          return;
+        }
+        const hr = parseInt(newReading.heartRate);
+        if (hr < 30 || hr > 220) {
+          showErrorToast('Heart rate value seems unusual. Please double-check.');
+          return;
+        }
+        value = newReading.heartRate;
+        type = 'heart_rate';
+      } else if (newReading.type === 'temperature') {
+        if (!newReading.temperature) {
+          showValidationErrorToast('temperature value');
+          return;
+        }
+        const temp = parseFloat(newReading.temperature);
+        if (temp < 90 || temp > 110) {
+          showErrorToast('Temperature value seems unusual. Please double-check.');
+          return;
+        }
+        value = newReading.temperature;
+        type = 'temperature';
+      }
+
+      if (!value) return;
+
       setSubmitting(true);
       
       // Calculate status based on normal ranges
@@ -153,10 +192,10 @@ const PatientDashboard: React.FC = () => {
         temperature: ''
       });
       setShowAddForm(false);
-      toast.success('Reading saved successfully!');
+      showVitalSavedToast();
     } catch (error) {
       console.error('Error saving vital reading:', error);
-      toast.error('Failed to save reading. Please try again.');
+      showErrorToast('Failed to save reading. Please check your connection and try again.');
     } finally {
       setSubmitting(false);
     }

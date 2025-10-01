@@ -7,6 +7,7 @@ import DoctorDashboard from './components/DoctorDashboard'
 import AuthModal from './components/AuthModal'
 import RoleSelectionModal from './components/RoleSelectionModal'
 import AuthCallback from './components/AuthCallback'
+import ErrorBoundary from './components/ErrorBoundary'
 import { Toaster } from 'react-hot-toast'
 
 const AppRoutes = () => {
@@ -99,12 +100,14 @@ const AppRoutes = () => {
 
 const App = () => {
   return (
-    <AuthProvider>
-      <Router>
-        <AppRoutes />
-        <Toaster position="top-right" />
-      </Router>
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <Router>
+          <AppRoutes />
+          <Toaster position="top-right" />
+        </Router>
+      </AuthProvider>
+    </ErrorBoundary>
   )
 }
 
