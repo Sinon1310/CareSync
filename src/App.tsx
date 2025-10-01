@@ -34,16 +34,23 @@ const AppRoutes = () => {
   const getRedirectElement = () => {
     // Don't auto-redirect if we're waiting for role selection
     if (user && !profile && showRoleSelection) {
+      console.log('🔄 Showing role selection for user:', user.email);
       return <LandingPage />
     }
     
     if (user && profile) {
+      console.log('🚀 Auto-redirecting user to dashboard:', {
+        userEmail: user.email,
+        userRole: profile.role
+      });
       if (profile.role === 'patient') {
         return <Navigate to="/patient-dashboard" replace />
       } else if (profile.role === 'doctor') {
         return <Navigate to="/doctor-dashboard" replace />
       }
     }
+    
+    console.log('🏠 Showing landing page for:', user ? `${user.email} (no profile)` : 'no user');
     return <LandingPage />
   }
 

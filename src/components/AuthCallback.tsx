@@ -34,19 +34,26 @@ const AuthCallback = () => {
       ? '/patient-dashboard' 
       : '/doctor-dashboard';
     
-    console.log('Redirecting to:', redirectPath);
+    console.log('✅ Redirecting to dashboard:', {
+      redirectPath,
+      userEmail: user.email,
+      userRole: profile.role
+    });
     return <Navigate to={redirectPath} replace />;
   }
 
   // If we have a user but no profile, and role selection is showing, go to home
   // so the role selection modal can appear
   if (user && !profile) {
-    console.log('User exists but no profile, redirecting to home for role selection');
+    console.log('⚠️ User exists but no profile, triggering role selection:', {
+      userEmail: user.email,
+      showRoleSelection
+    });
     return <Navigate to="/" replace />;
   }
 
   // If no user, redirect to landing page
-  console.log('No user found, redirecting to landing page');
+  console.log('❌ No user found, redirecting to landing page');
   return <Navigate to="/" replace />;
 };
 

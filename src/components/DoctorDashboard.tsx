@@ -14,7 +14,8 @@ import {
   LogOut,
   User,
   Loader2,
-  UserPlus
+  UserPlus,
+  MessageCircle
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { doctorPatientService, vitalReadingsService } from '../lib/database';
@@ -23,6 +24,7 @@ import PatientDetailModal from './PatientDetailModal';
 import AlertSystem from './AlertSystem';
 import AnalyticsDashboard from './AnalyticsDashboard';
 import QuickActions from './QuickActions';
+import MessagingInterface from './MessagingInterface';
 
 interface PatientWithVitals {
   id: string;
@@ -45,6 +47,7 @@ const DoctorDashboard: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPatient, setSelectedPatient] = useState<PatientWithVitals | null>(null);
   const [showPatientModal, setShowPatientModal] = useState(false);
+  const [activeTab, setActiveTab] = useState<'overview' | 'messages'>('overview');
 
   useEffect(() => {
     if (user?.id && profile?.role === 'doctor') {
@@ -214,11 +217,47 @@ const DoctorDashboard: React.FC = () => {
         </div>
       </div>
 
+      {/* Tab Navigation */}
+      <div className="bg-white border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <nav className="flex space-x-8" aria-label="Tabs">
+            <button
+              onClick={() => setActiveTab('overview')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                activeTab === 'overview'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <Users className="w-4 h-4" />
+                Patient Overview
+              </div>
+            </button>
+            <button
+              onClick={() => setActiveTab('messages')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                activeTab === 'messages'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <MessageCircle className="w-4 h-4" />
+                Messages
+              </div>
+            </button>
+          </nav>
+        </div>
+      </div>
+
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         
-        {/* Stats Overview */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        {activeTab === 'overview' ? (
+          <>
+            {/* Stats Overview */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
             <div className="flex items-center">
               <div className="bg-blue-100 p-3 rounded-lg">
@@ -390,10 +429,26 @@ const DoctorDashboard: React.FC = () => {
                 </div>
               );
             })}
+            </div>
+          )}
+        </>
+        ) : (
+          /* Messages Tab */
+          <div className="h-full">
+            {user ? (
+              <MessagingInterface currentUser={user} isDoctor={true} />
+            ) : (
+              <div className="flex items-center justify-center h-96">
+                <div className="text-center text-gray-500">
+                  <MessageCircle className="w-12 h-12 mx-auto mb-2 text-gray-300" />
+                  <p>Loading messaging...</p>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
-        {filteredPatients.length === 0 && patients.length > 0 && (
+        {filteredPatients.length === 0 && patients.length > 0 && activeTab === 'overview' && (
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-12 text-center">
             <Search className="h-12 w-12 text-gray-400 mx-auto mb-4" />
             <p className="text-gray-600">No patients found matching "{searchTerm}"</p>
