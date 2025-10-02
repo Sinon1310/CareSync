@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { 
   Users, 
   AlertTriangle, 
-  TrendingUp, 
   Search,
   Bell,
   Activity,
@@ -13,7 +12,6 @@ import {
   XCircle,
   LogOut,
   User,
-  Loader2,
   UserPlus,
   MessageCircle
 } from 'lucide-react';
@@ -25,6 +23,9 @@ import AlertSystem from './AlertSystem';
 import AnalyticsDashboard from './AnalyticsDashboard';
 import QuickActions from './QuickActions';
 import MessagingInterface from './MessagingInterface';
+import StatCard from './StatCard';
+import Alert from './Alert';
+import LoadingSpinner from './LoadingSpinner';
 
 interface PatientWithVitals {
   id: string;
@@ -44,6 +45,7 @@ const DoctorDashboard: React.FC = () => {
   const { user, profile, signOut } = useAuth();
   const [patients, setPatients] = useState<PatientWithVitals[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPatient, setSelectedPatient] = useState<PatientWithVitals | null>(null);
   const [showPatientModal, setShowPatientModal] = useState(false);
@@ -128,6 +130,7 @@ const DoctorDashboard: React.FC = () => {
       
     } catch (error) {
       console.error('Error loading patients:', error);
+      setError('Failed to load patients. Please try again.');
       toast.error('Failed to load patients');
     } finally {
       setLoading(false);
@@ -178,10 +181,7 @@ const DoctorDashboard: React.FC = () => {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin text-blue-600 mx-auto mb-4" />
-          <p className="text-gray-600">Loading doctor dashboard...</p>
-        </div>
+        <LoadingSpinner size="lg" text="Loading doctor dashboard..." />
       </div>
     );
   }
@@ -254,64 +254,48 @@ const DoctorDashboard: React.FC = () => {
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         
+        {error && (
+          <Alert
+            type="error"
+            title="Error Loading Data"
+            message={error}
+            onClose={() => setError(null)}
+            className="mb-6"
+          />
+        )}
+        
         {activeTab === 'overview' ? (
           <>
             {/* Stats Overview */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-            <div className="flex items-center">
-              <div className="bg-blue-100 p-3 rounded-lg">
-                <Users className="h-6 w-6 text-blue-600" />
-              </div>
-              <div className="ml-4">
-                <h3 className="text-sm font-medium text-gray-500">Total Patients</h3>
-                <p className="text-2xl font-bold text-gray-900">{patients.length}</p>
-              </div>
-            </div>
-          </div>
+              <StatCard
+                title="Total Patients"
+                value={patients.length}
+                icon="user"
+                color="blue"
+              />
 
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-            <div className="flex items-center">
-              <div className="bg-red-100 p-3 rounded-lg">
-                <AlertTriangle className="h-6 w-6 text-red-600" />
-              </div>
-              <div className="ml-4">
-                <h3 className="text-sm font-medium text-gray-500">Critical</h3>
-                <p className="text-2xl font-bold text-gray-900">
-                  {patients.filter(p => p.status === 'critical').length}
-                </p>
-              </div>
-            </div>
-          </div>
+              <StatCard
+                title="Critical"
+                value={patients.filter(p => p.status === 'critical').length}
+                icon="heart"
+                color="red"
+              />
 
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-            <div className="flex items-center">
-              <div className="bg-yellow-100 p-3 rounded-lg">
-                <TrendingUp className="h-6 w-6 text-yellow-600" />
-              </div>
-              <div className="ml-4">
-                <h3 className="text-sm font-medium text-gray-500">Warning</h3>
-                <p className="text-2xl font-bold text-gray-900">
-                  {patients.filter(p => p.status === 'warning').length}
-                </p>
-              </div>
-            </div>
-          </div>
+              <StatCard
+                title="Warning"
+                value={patients.filter(p => p.status === 'warning').length}
+                icon="activity"
+                color="yellow"
+              />
 
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-            <div className="flex items-center">
-              <div className="bg-green-100 p-3 rounded-lg">
-                <Activity className="h-6 w-6 text-green-600" />
-              </div>
-              <div className="ml-4">
-                <h3 className="text-sm font-medium text-gray-500">Normal</h3>
-                <p className="text-2xl font-bold text-gray-900">
-                  {patients.filter(p => p.status === 'normal').length}
-                </p>
-              </div>
+              <StatCard
+                title="Normal"
+                value={patients.filter(p => p.status === 'normal').length}
+                icon="activity"
+                color="green"
+              />
             </div>
-          </div>
-        </div>
 
         {/* Search and Filters */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-8">

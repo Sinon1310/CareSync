@@ -10,8 +10,7 @@ import {
   Clock,
   BarChart3,
   LogOut,
-  User,
-  Loader2
+  User
 } from 'lucide-react';
 import VitalChart from './VitalChart';
 import MedicationTracker from './MedicationTracker';
@@ -21,6 +20,8 @@ import toast from 'react-hot-toast';
 import { showSuccessToast, showErrorToast, showVitalSavedToast, showValidationErrorToast, showLoadingToast } from '../utils/toast';
 import LoadingSpinner from './LoadingSpinner';
 import ErrorBoundary from './ErrorBoundary';
+import StatCard from './StatCard';
+import Alert from './Alert';
 
 interface VitalReading {
   id: string;
@@ -314,10 +315,7 @@ const PatientDashboard: React.FC = () => {
       <div className="max-w-7xl mx-auto">
         {loading ? (
           <div className="flex items-center justify-center min-h-96">
-            <div className="text-center">
-              <Loader2 className="h-8 w-8 animate-spin text-blue-600 mx-auto mb-4" />
-              <p className="text-gray-600">Loading your health data...</p>
-            </div>
+            <LoadingSpinner size="lg" text="Loading your health data..." />
           </div>
         ) : (
           <>
@@ -514,7 +512,7 @@ const PatientDashboard: React.FC = () => {
                     >
                       {submitting ? (
                         <>
-                          <Loader2 className="h-4 w-4 animate-spin" />
+                          <LoadingSpinner size="sm" />
                           Saving...
                         </>
                       ) : (
