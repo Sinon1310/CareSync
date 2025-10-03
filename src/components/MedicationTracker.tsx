@@ -42,7 +42,7 @@ const MedicationTracker: React.FC = () => {
     try {
       setLoading(true);
       const [medicationsData, todayLogs] = await Promise.all([
-        medicationsService.getByPatientId(user.id),
+        medicationsService.getByUserId(user.id),
         medicationLogsService.getTodayLogs(user.id)
       ]);
 
@@ -72,7 +72,7 @@ const MedicationTracker: React.FC = () => {
     try {
       setSubmitting(true);
       await medicationsService.create({
-        patient_id: user.id,
+        user_id: user.id,
         name: newMedication.name,
         dosage: newMedication.dosage,
         frequency: newMedication.frequency,
@@ -105,7 +105,7 @@ const MedicationTracker: React.FC = () => {
     try {
       await medicationLogsService.logTaken({
         medication_id: medicationId,
-        patient_id: user.id,
+        user_id: user.id,
         taken_at: new Date().toISOString()
       });
 

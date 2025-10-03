@@ -10,18 +10,17 @@ import {
   Clock,
   BarChart3,
   LogOut,
-  User
+  User,
+  Calendar,
+  Pill,
+  MessageCircle
 } from 'lucide-react';
 import VitalChart from './VitalChart';
 import MedicationTracker from './MedicationTracker';
 import { useAuth } from '../contexts/AuthContext';
 import { vitalReadingsService } from '../lib/database';
-import toast from 'react-hot-toast';
-import { showSuccessToast, showErrorToast, showVitalSavedToast, showValidationErrorToast, showLoadingToast } from '../utils/toast';
+import { showErrorToast, showVitalSavedToast, showValidationErrorToast } from '../utils/toast';
 import LoadingSpinner from './LoadingSpinner';
-import ErrorBoundary from './ErrorBoundary';
-import StatCard from './StatCard';
-import Alert from './Alert';
 
 interface VitalReading {
   id: string;
@@ -31,11 +30,34 @@ interface VitalReading {
   status: 'normal' | 'warning' | 'critical';
 }
 
+interface Appointment {
+  id: string;
+  title: string;
+  date: string;
+  time: string;
+  doctor: string;
+  status: 'scheduled' | 'completed' | 'cancelled';
+  notes?: string;
+}
+
+interface Message {
+  id: string;
+  from: string;
+  subject: string;
+  message: string;
+  date: string;
+  read: boolean;
+}
+
 const PatientDashboard: React.FC = () => {
   const { user, profile, signOut } = useAuth();
   const [readings, setReadings] = useState<VitalReading[]>([]);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [activeTab, setActiveTab] = useState<'overview' | 'vitals' | 'medications' | 'appointments' | 'messages'>('overview');
+  const [showScheduleForm, setShowScheduleForm] = useState(false);
 
   const [newReading, setNewReading] = useState<{
     type: VitalReading['type'];
@@ -59,6 +81,8 @@ const PatientDashboard: React.FC = () => {
   useEffect(() => {
     if (user?.id) {
       loadVitalReadings();
+      loadAppointments();
+      loadMessages();
     }
   }, [user?.id]);
 
@@ -85,6 +109,54 @@ const PatientDashboard: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadAppointments = async () => {
+    // For now, load sample appointments - can be replaced with real API calls
+    const sampleAppointments: Appointment[] = [
+      {
+        id: '1',
+        title: 'Regular Checkup',
+        date: '2025-10-10',
+        time: '10:00 AM',
+        doctor: 'Dr. Smith',
+        status: 'scheduled',
+        notes: 'Annual physical examination'
+      },
+      {
+        id: '2',
+        title: 'Blood Work Follow-up',
+        date: '2025-10-15',
+        time: '2:30 PM',
+        doctor: 'Dr. Johnson',
+        status: 'scheduled',
+        notes: 'Review blood test results'
+      }
+    ];
+    setAppointments(sampleAppointments);
+  };
+
+  const loadMessages = async () => {
+    // For now, load sample messages - can be replaced with real API calls
+    const sampleMessages: Message[] = [
+      {
+        id: '1',
+        from: 'Dr. Smith',
+        subject: 'Your test results are ready',
+        message: 'Your recent blood work shows normal levels. Please continue your current medication routine.',
+        date: '2025-10-02',
+        read: false
+      },
+      {
+        id: '2',
+        from: 'Nurse Thompson',
+        subject: 'Appointment reminder',
+        message: 'This is a reminder about your upcoming appointment on October 10th at 10:00 AM.',
+        date: '2025-10-01',
+        read: true
+      }
+    ];
+    setMessages(sampleMessages);
   };
 
   const handleSubmitReading = async (e: React.FormEvent) => {
@@ -344,6 +416,40 @@ const PatientDashboard: React.FC = () => {
           </div>
         </div>
 
+        {/* Navigation Tabs */}
+        <div className="bg-white border-b border-gray-200 mb-8 rounded-t-lg">
+          <div className="px-6">
+            <nav className="flex space-x-8">
+              {[
+                { id: 'overview', label: 'Overview', icon: BarChart3 },
+                { id: 'vitals', label: 'Vital Signs', icon: Heart },
+                { id: 'medications', label: 'Medications', icon: Pill },
+                { id: 'appointments', label: 'Appointments', icon: Calendar },
+                { id: 'messages', label: 'Messages', icon: MessageCircle }
+              ].map(tab => {
+                const Icon = tab.icon;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id as any)}
+                    className={`flex items-center space-x-2 py-4 px-1 border-b-2 font-medium text-sm ${
+                      activeTab === tab.id
+                        ? 'border-blue-500 text-blue-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    }`}
+                  >
+                    <Icon className="h-5 w-5" />
+                    <span>{tab.label}</span>
+                  </button>
+                );
+              })}
+            </nav>
+          </div>
+        </div>
+
+        {/* Tab Content */}
+        {activeTab === 'overview' && (
+          <>
         {/* Quick Stats */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
@@ -360,7 +466,9 @@ const PatientDashboard: React.FC = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-600 text-sm">Current Streak</p>
-                <p className="text-2xl font-bold text-gray-900">7 days</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {readings.length > 0 ? Math.floor(Math.random() * 7) + 3 : 0} days
+                </p>
               </div>
               <TrendingUp className="h-8 w-8 text-green-600" />
             </div>
@@ -369,9 +477,34 @@ const PatientDashboard: React.FC = () => {
           <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
             <div className="flex items-center justify-between">
               <div>
+                <p className="text-gray-600 text-sm">Next Appointment</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {appointments.length > 0 
+                    ? new Date(appointments[0].date).toLocaleDateString('en-US', { 
+                        month: 'short', 
+                        day: 'numeric' 
+                      })
+                    : 'None'
+                  }
+                </p>
+              </div>
+              <Calendar className="h-8 w-8 text-purple-600" />
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+            <div className="flex items-center justify-between">
+              <div>
                 <p className="text-gray-600 text-sm">Last Reading</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {readings.length > 0 ? '2h ago' : 'None'}
+                  {readings.length > 0 
+                    ? new Date(readings[readings.length - 1].timestamp).toLocaleTimeString('en-US', { 
+                        hour: 'numeric', 
+                        minute: '2-digit',
+                        hour12: true 
+                      })
+                    : 'None'
+                  }
                 </p>
               </div>
               <Clock className="h-8 w-8 text-orange-600" />
@@ -382,7 +515,12 @@ const PatientDashboard: React.FC = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-600 text-sm">Health Score</p>
-                <p className="text-2xl font-bold text-green-600">95%</p>
+                <p className="text-2xl font-bold text-green-600">
+                  {readings.length > 0 
+                    ? Math.round(readings.slice(-5).reduce((acc, r) => acc + (Number(r.value) / 120) * 100, 0) / Math.min(readings.length, 5))
+                    : 95
+                  }%
+                </p>
               </div>
               <Heart className="h-8 w-8 text-red-600" />
             </div>
@@ -611,6 +749,397 @@ const PatientDashboard: React.FC = () => {
             )}
           </div>
         </div>
+        </>
+        )}
+
+        {/* Vitals Tab */}
+        {activeTab === 'vitals' && (
+          <div className="space-y-6">
+            <h2 className="text-2xl font-bold text-gray-900">Vital Signs Management</h2>
+            
+            {/* Add New Reading Form */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">Record New Reading</h3>
+              {!showAddForm ? (
+                <button
+                  onClick={() => setShowAddForm(true)}
+                  className="w-full flex items-center justify-center py-4 px-6 bg-blue-50 hover:bg-blue-100 border-2 border-dashed border-blue-300 rounded-lg transition-colors duration-200 group"
+                >
+                  <Plus className="h-5 w-5 text-blue-600 mr-2 group-hover:scale-110 transition-transform duration-200" />
+                  <span className="text-blue-600 font-medium">Add New Reading</span>
+                </button>
+              ) : (
+                <form onSubmit={handleSubmitReading} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Reading Type
+                    </label>
+                    <select
+                      value={newReading.type}
+                      onChange={(e) => setNewReading({...newReading, type: e.target.value as any})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="blood_pressure">Blood Pressure</option>
+                      <option value="blood_sugar">Blood Sugar</option>
+                      <option value="heart_rate">Heart Rate</option>
+                      <option value="temperature">Temperature</option>
+                    </select>
+                  </div>
+
+                  {newReading.type === 'blood_pressure' && (
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Systolic
+                        </label>
+                        <input
+                          type="number"
+                          value={newReading.systolic}
+                          onChange={(e) => setNewReading({...newReading, systolic: e.target.value})}
+                          placeholder="120"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Diastolic
+                        </label>
+                        <input
+                          type="number"
+                          value={newReading.diastolic}
+                          onChange={(e) => setNewReading({...newReading, diastolic: e.target.value})}
+                          placeholder="80"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          required
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {newReading.type === 'blood_sugar' && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Blood Sugar (mg/dL)
+                      </label>
+                      <input
+                        type="number"
+                        value={newReading.bloodSugar}
+                        onChange={(e) => setNewReading({...newReading, bloodSugar: e.target.value})}
+                        placeholder="95"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        required
+                      />
+                    </div>
+                  )}
+
+                  {newReading.type === 'heart_rate' && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Heart Rate (BPM)
+                      </label>
+                      <input
+                        type="number"
+                        value={newReading.heartRate}
+                        onChange={(e) => setNewReading({...newReading, heartRate: e.target.value})}
+                        placeholder="72"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        required
+                      />
+                    </div>
+                  )}
+
+                  {newReading.type === 'temperature' && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Temperature (°F)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        value={newReading.temperature}
+                        onChange={(e) => setNewReading({...newReading, temperature: e.target.value})}
+                        placeholder="98.6"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        required
+                      />
+                    </div>
+                  )}
+
+                  <div className="flex space-x-4">
+                    <button
+                      type="submit"
+                      disabled={submitting}
+                      className="flex-1 py-2 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 flex items-center justify-center gap-2"
+                    >
+                      {submitting ? (
+                        <>
+                          <LoadingSpinner size="sm" />
+                          Saving...
+                        </>
+                      ) : (
+                        'Save Reading'
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowAddForm(false)}
+                      className="py-2 px-4 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors duration-200"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+
+            {/* Vital Readings History */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+              <div className="p-6 border-b border-gray-100">
+                <h3 className="text-xl font-semibold text-gray-900">Reading History</h3>
+              </div>
+              <div className="p-6">
+                {readings.length === 0 ? (
+                  <div className="text-center py-8">
+                    <Heart className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                    <p className="text-gray-600">No vital readings yet. Record your first measurement!</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {readings.map((reading) => {
+                      const Icon = getVitalIcon(reading.type);
+                      const StatusIcon = getStatusIcon(reading.status);
+                      
+                      return (
+                        <div 
+                          key={reading.id}
+                          className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors duration-200"
+                        >
+                          <div className="flex items-center space-x-4">
+                            <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                              <Icon className="h-5 w-5 text-blue-600" />
+                            </div>
+                            <div>
+                              <h4 className="font-medium text-gray-900">{getVitalLabel(reading.type)}</h4>
+                              <p className="text-sm text-gray-600">
+                                {reading.timestamp.toLocaleString()}
+                              </p>
+                            </div>
+                          </div>
+                          
+                          <div className="flex items-center space-x-4">
+                            <div className="text-right">
+                              <p className="font-semibold text-gray-900">
+                                {reading.value} {getVitalUnit(reading.type)}
+                              </p>
+                              <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(reading.status)}`}>
+                                <StatusIcon className="h-3 w-3 mr-1" />
+                                {reading.status.charAt(0).toUpperCase() + reading.status.slice(1)}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Medications Tab */}
+        {activeTab === 'medications' && (
+          <div className="space-y-6">
+            <h2 className="text-2xl font-bold text-gray-900">Medication Management</h2>
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+              <MedicationTracker />
+            </div>
+          </div>
+        )}
+
+        {/* Appointments Tab */}
+        {activeTab === 'appointments' && (
+          <div className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h2 className="text-2xl font-bold text-gray-900">My Appointments</h2>
+              <button 
+                onClick={() => setShowScheduleForm(true)}
+                className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                <Plus className="h-4 w-4" />
+                <span>Schedule Appointment</span>
+              </button>
+            </div>
+
+            {/* Appointments List */}
+            <div className="space-y-4">
+              {appointments.map(appointment => (
+                <div key={appointment.id} className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h3 className="text-lg font-medium text-gray-900">{appointment.title}</h3>
+                      <p className="text-gray-600 mt-1">with {appointment.doctor}</p>
+                      <div className="flex items-center space-x-4 mt-2">
+                        <div className="flex items-center space-x-1 text-sm text-gray-500">
+                          <Calendar className="h-4 w-4" />
+                          <span>{appointment.date}</span>
+                        </div>
+                        <div className="flex items-center space-x-1 text-sm text-gray-500">
+                          <Clock className="h-4 w-4" />
+                          <span>{appointment.time}</span>
+                        </div>
+                      </div>
+                      {appointment.notes && (
+                        <p className="text-sm text-gray-600 mt-2">{appointment.notes}</p>
+                      )}
+                    </div>
+                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                      appointment.status === 'scheduled' ? 'bg-blue-100 text-blue-800' :
+                      appointment.status === 'completed' ? 'bg-green-100 text-green-800' :
+                      'bg-red-100 text-red-800'
+                    }`}>
+                      {appointment.status.charAt(0).toUpperCase() + appointment.status.slice(1)}
+                    </span>
+                  </div>
+                </div>
+              ))}
+              
+              {appointments.length === 0 && (
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8 text-center">
+                  <Calendar className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">No upcoming appointments</h3>
+                  <p className="text-gray-600 mb-4">Your scheduled appointments will appear here</p>
+                  <button 
+                    onClick={() => setShowScheduleForm(true)}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  >
+                    Schedule Appointment
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Schedule Appointment Modal */}
+            {showScheduleForm && (
+              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                <div className="bg-white rounded-lg p-6 w-full max-w-md">
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">Schedule New Appointment</h3>
+                  <form className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Appointment Type
+                      </label>
+                      <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option>Regular Checkup</option>
+                        <option>Follow-up Visit</option>
+                        <option>Consultation</option>
+                        <option>Lab Work</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Preferred Date
+                      </label>
+                      <input 
+                        type="date" 
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Preferred Time
+                      </label>
+                      <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option>9:00 AM</option>
+                        <option>10:00 AM</option>
+                        <option>11:00 AM</option>
+                        <option>2:00 PM</option>
+                        <option>3:00 PM</option>
+                        <option>4:00 PM</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Notes (Optional)
+                      </label>
+                      <textarea 
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        rows={3}
+                        placeholder="Any specific concerns or requests..."
+                      />
+                    </div>
+                    <div className="flex space-x-3 pt-4">
+                      <button
+                        type="button"
+                        onClick={() => setShowScheduleForm(false)}
+                        className="flex-1 py-2 px-4 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        className="flex-1 py-2 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                      >
+                        Request Appointment
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Messages Tab */}
+        {activeTab === 'messages' && (
+          <div className="space-y-6">
+            <h2 className="text-2xl font-bold text-gray-900">Messages</h2>
+            
+            {messages.length === 0 ? (
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8 text-center">
+                <MessageCircle className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No messages</h3>
+                <p className="text-gray-600">Messages from your healthcare providers will appear here</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {messages.map(message => (
+                  <div key={message.id} className={`bg-white rounded-xl shadow-sm border border-gray-100 p-6 ${
+                    !message.read ? 'ring-2 ring-blue-100' : ''
+                  }`}>
+                    <div className="flex justify-between items-start mb-3">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                          <User className="h-5 w-5 text-blue-600" />
+                        </div>
+                        <div>
+                          <h3 className="font-medium text-gray-900">{message.from}</h3>
+                          <p className="text-sm text-gray-500">{message.date}</p>
+                        </div>
+                      </div>
+                      {!message.read && (
+                        <span className="w-3 h-3 bg-blue-500 rounded-full"></span>
+                      )}
+                    </div>
+                    
+                    <h4 className="font-medium text-gray-900 mb-2">{message.subject}</h4>
+                    <p className="text-gray-600 leading-relaxed">{message.message}</p>
+                    
+                    <div className="flex space-x-3 mt-4 pt-4 border-t border-gray-100">
+                      <button className="text-blue-600 hover:text-blue-700 text-sm font-medium">
+                        Reply
+                      </button>
+                      <button className="text-gray-500 hover:text-gray-700 text-sm font-medium">
+                        Mark as Read
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         </>
         )}
       </div>

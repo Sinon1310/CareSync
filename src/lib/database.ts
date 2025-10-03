@@ -39,11 +39,13 @@ export interface Appointment {
   patient_id: string
   title: string
   description?: string
-  scheduled_at: string
+  appointment_date: string
   duration_minutes: number
   status: 'scheduled' | 'completed' | 'cancelled' | 'rescheduled'
   meeting_link?: string
+  notes?: string
   created_at: string
+  updated_at: string
 }
 
 export interface DoctorPatient {
@@ -61,7 +63,7 @@ export interface DoctorPatient {
 
 export interface Medication {
   id: string
-  patient_id: string
+  user_id: string
   prescribed_by?: string | null
   name: string
   dosage: string
@@ -77,7 +79,7 @@ export interface Medication {
 export interface MedicationLog {
   id: string
   medication_id: string
-  patient_id: string
+  user_id: string
   taken_at: string
   notes?: string | null
   created_at: string
@@ -217,10 +219,10 @@ export const doctorPatientService = {
   // Get patients for a doctor
   async getPatientsByDoctorId(doctorId: string) {
     const { data, error } = await supabase
-      .from('doctor_patients')
+      .from('doctor_patient_relationships')
       .select(`
         *,
-        patient:profiles!doctor_patients_patient_id_fkey(id, full_name, email)
+        patient:profiles!doctor_patient_relationships_patient_id_fkey(id, full_name, email, role)
       `)
       .eq('doctor_id', doctorId)
       .eq('status', 'active')
@@ -232,10 +234,10 @@ export const doctorPatientService = {
   // Get doctors for a patient
   async getDoctorsByPatientId(patientId: string) {
     const { data, error } = await supabase
-      .from('doctor_patients')
+      .from('doctor_patient_relationships')
       .select(`
         *,
-        doctor:profiles!doctor_patients_doctor_id_fkey(id, full_name, email)
+        doctor:profiles!doctor_patient_relationships_doctor_id_fkey(id, full_name, email, role)
       `)
       .eq('patient_id', patientId)
       .eq('status', 'active')
@@ -247,7 +249,7 @@ export const doctorPatientService = {
   // Assign patient to doctor
   async assignPatient(doctorId: string, patientId: string) {
     const { data, error } = await supabase
-      .from('doctor_patients')
+      .from('doctor_patient_relationships')
       .insert({
         doctor_id: doctorId,
         patient_id: patientId,
@@ -255,6 +257,20 @@ export const doctorPatientService = {
       })
       .select()
       .single()
+
+    if (error) throw error
+    return data
+  },
+
+  // Search for patients to assign
+  async searchPatients(searchTerm: string, doctorId: string) {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, full_name, email, role')
+      .eq('role', 'patient')
+      .or(`full_name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`)
+      .not('id', 'in', `(SELECT patient_id FROM doctor_patient_relationships WHERE doctor_id = '${doctorId}' AND status = 'active')`)
+      .limit(10)
 
     if (error) throw error
     return data
@@ -274,7 +290,7 @@ export const appointmentsService = {
         patient:profiles!appointments_patient_id_fkey(full_name, email)
       `)
       .eq(column, userId)
-      .order('scheduled_at', { ascending: true })
+      .order('appointment_date', { ascending: true })
 
     if (error) throw error
     return data
@@ -352,17 +368,22 @@ export const profilesService = {
 
 // Medications Service
 export const medicationsService = {
-  // Get medications for a patient
-  async getByPatientId(patientId: string) {
+  // Get medications for a user
+  async getByUserId(userId: string) {
     const { data, error } = await supabase
       .from('medications')
       .select('*')
-      .eq('patient_id', patientId)
+      .eq('user_id', userId)
       .eq('is_active', true)
       .order('created_at', { ascending: false })
 
     if (error) throw error
     return data as Medication[]
+  },
+
+  // Legacy method for backward compatibility
+  async getByPatientId(patientId: string) {
+    return this.getByUserId(patientId)
   },
 
   // Add a new medication
@@ -410,20 +431,25 @@ export const medicationsService = {
 
 // Medication Logs Service
 export const medicationLogsService = {
-  // Get medication logs for a patient
-  async getByPatientId(patientId: string, limit = 50) {
+  // Get medication logs for a user
+  async getByUserId(userId: string, limit = 50) {
     const { data, error } = await supabase
       .from('medication_logs')
       .select(`
         *,
         medication:medications(name, dosage)
       `)
-      .eq('patient_id', patientId)
+      .eq('user_id', userId)
       .order('taken_at', { ascending: false })
       .limit(limit)
 
     if (error) throw error
-    return data
+    return data as MedicationLog[]
+  },
+
+  // Legacy method for backward compatibility
+  async getByPatientId(patientId: string, limit = 50) {
+    return this.getByUserId(patientId, limit)
   },
 
   // Log medication taken
@@ -438,8 +464,8 @@ export const medicationLogsService = {
     return data as MedicationLog
   },
 
-  // Get today's medication logs for a patient
-  async getTodayLogs(patientId: string) {
+  // Get today's medication logs for a user
+  async getTodayLogs(userId: string) {
     const today = new Date().toISOString().split('T')[0]
     const { data, error } = await supabase
       .from('medication_logs')
@@ -447,12 +473,12 @@ export const medicationLogsService = {
         *,
         medication:medications(name, dosage, frequency)
       `)
-      .eq('patient_id', patientId)
+      .eq('user_id', userId)
       .gte('taken_at', `${today}T00:00:00.000Z`)
       .lt('taken_at', `${today}T23:59:59.999Z`)
       .order('taken_at', { ascending: false })
 
     if (error) throw error
-    return data
+    return data as MedicationLog[]
   }
 }

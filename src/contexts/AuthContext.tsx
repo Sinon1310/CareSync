@@ -48,45 +48,69 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [])
 
   useEffect(() => {
-    console.log('AuthContext initializing...')
+    console.log('🚀 AuthContext initializing...')
     
     // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
-      console.log('Initial session:', session?.user?.email || 'No user')
+      console.log('📊 Initial session check:', {
+        hasSession: !!session,
+        userEmail: session?.user?.email || 'No user',
+        userId: session?.user?.id || 'No ID',
+        timestamp: new Date().toISOString()
+      })
+      
       setUser(session?.user ?? null)
       if (session?.user) {
+        console.log('👤 Initial session found, fetching profile for:', session.user.email)
         fetchProfile(session.user.id)
       } else {
+        console.log('👤 No initial session found')
         setLoading(false)
       }
     }).catch((error) => {
-      console.error('Auth session error:', error)
+      console.error('❌ Auth session error:', error)
       setLoading(false)
     })
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('Auth state changed:', event, session?.user?.email || 'No user')
-        setUser(session?.user ?? null)
+        console.log('🔄 Auth state changed:', event, session?.user?.email || 'No user')
         
-        if (session?.user) {
-          const profileExists = await fetchProfile(session.user.id);
+        if (event === 'SIGNED_IN' && session?.user) {
+          console.log('🎉 User successfully signed in via Google OAuth!')
+          setUser(session.user)
           
-          // If we have a user but no profile, show role selection
-          if (!profileExists) {
-            console.log('User logged in but no profile exists, showing role selection');
-            setShowRoleSelection(true);
-            setLoading(false);
-          } else {
-            console.log('User logged in with existing profile, ready for dashboard');
-            setShowRoleSelection(false);
-            setLoading(false);
-          }
-        } else {
+          // Small delay to ensure everything is settled
+          setTimeout(async () => {
+            console.log('👤 Checking profile for user:', session.user.email)
+            
+            const profileExists = await fetchProfile(session.user.id);
+            
+            if (!profileExists) {
+              console.log('❌ No profile exists, showing role selection')
+              setShowRoleSelection(true);
+              setLoading(false);
+            } else {
+              console.log('✅ Profile exists, user ready for dashboard')
+              setShowRoleSelection(false);
+              setLoading(false);
+            }
+          }, 1000) // 1 second delay for stability
+          
+        } else if (event === 'SIGNED_OUT' || !session?.user) {
+          console.log('� User signed out or no session')
+          setUser(null)
           setProfile(null);
           setShowRoleSelection(false);
           setLoading(false);
+        } else {
+          console.log('🔄 Other auth event:', event)
+          setUser(session?.user ?? null)
+          if (session?.user) {
+            await fetchProfile(session.user.id)
+          }
+          setLoading(false)
         }
       }
     )
@@ -170,19 +194,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signInWithGoogle = async () => {
     try {
+      console.log('🚀 Starting Google OAuth...')
+      
+      // Clear any existing state
+      setShowRoleSelection(false)
+      setProfile(null)
+      
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
+          redirectTo: `${window.location.origin}`,
           queryParams: {
             access_type: 'offline',
             prompt: 'consent',
           },
         },
       })
-      if (error) throw error
+      
+      if (error) {
+        console.error('❌ Google OAuth error:', error)
+        throw error
+      }
+      
+      console.log('✅ Google OAuth initiated successfully')
     } catch (error) {
-      console.error('Error signing in with Google:', error)
+      console.error('❌ Error signing in with Google:', error)
+      alert('Google sign-in failed. Please try again.')
       throw error
     }
   }
@@ -192,54 +229,69 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }
 
   const createProfileForGoogleUser = async (role: 'patient' | 'doctor') => {
-    if (!user) throw new Error('No user found')
+    if (!user) {
+      console.error('❌ No user found for profile creation')
+      throw new Error('No user found')
+    }
     
-    console.log('Creating profile for Google user:', {
+    console.log('🔄 Creating profile for Google user:', {
       userId: user.id,
       email: user.email,
       role: role
     })
-    
+
     try {
-      // Check if profile already exists
-      const { data: existingProfile } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single()
-        
-      if (existingProfile) {
-        console.log('Profile already exists, updating role:', role)
-        // Update existing profile
-        const { error } = await supabase
-          .from('profiles')
-          .update({ role: role })
-          .eq('id', user.id)
-          
-        if (error) throw error
-      } else {
-        // Insert new profile
-        const { error } = await supabase
-          .from('profiles')
-          .insert({
-            id: user.id,
-            email: user.email || '',
-            full_name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
-            role,
-          })
-  
-        if (error) throw error
+      // Simple upsert approach - either insert or update
+      const profileData = {
+        id: user.id,
+        email: user.email || '',
+        full_name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
+        role,
+        updated_at: new Date().toISOString()
       }
       
-      // Refresh profile
-      await fetchProfile(user.id)
+      console.log('📝 Profile data to upsert:', profileData)
+      
+      const { data, error } = await supabase
+        .from('profiles')
+        .upsert(profileData, { 
+          onConflict: 'id',
+          ignoreDuplicates: false 
+        })
+        .select()
+        .single()
+
+      if (error) {
+        console.error('❌ Error upserting profile:', error)
+        console.error('Full error details:', JSON.stringify(error, null, 2))
+        throw new Error(`Database error: ${error.message}`)
+      }
+      
+      console.log('✅ Profile upserted successfully:', data)
+      
+      // Update local state immediately
+      setProfile(data)
+      
+      // Close the role selection modal
       setShowRoleSelection(false)
+      
+      console.log('🚀 Profile ready, navigating to dashboard:', role)
+      
+      // Force immediate navigation
+      if (role === 'patient') {
+        window.location.href = '/patient-dashboard'
+      } else {
+        window.location.href = '/doctor-dashboard'
+      }
       
       // Return success
       return { success: true, role }
     } catch (error) {
-      console.error('Error creating/updating profile:', error)
-      throw error
+      console.error('❌ FATAL ERROR in createProfileForGoogleUser:', error)
+      
+      // Show user-friendly error
+      const errorMessage = error instanceof Error ? error.message : 'Failed to create profile'
+      throw new Error(errorMessage)
     }
   }
 

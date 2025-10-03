@@ -6,7 +6,6 @@ import PatientDashboard from './components/PatientDashboard'
 import DoctorDashboard from './components/DoctorDashboard'
 import AuthModal from './components/AuthModal'
 import RoleSelectionModal from './components/RoleSelectionModal'
-import AuthCallback from './components/AuthCallback'
 import ErrorBoundary from './components/ErrorBoundary'
 import { Toaster } from 'react-hot-toast'
 
@@ -59,7 +58,6 @@ const AppRoutes = () => {
     <>
       <Routes>
         <Route path="/" element={getRedirectElement()} />
-        <Route path="/auth/callback" element={<AuthCallback />} />
         <Route 
           path="/patient-dashboard" 
           element={

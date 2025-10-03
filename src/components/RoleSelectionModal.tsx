@@ -22,18 +22,26 @@ const RoleSelectionModal: React.FC<RoleSelectionModalProps> = ({
     
     setLoading(true)
     try {
-      console.log('Submitting role selection:', selectedRole)
-      await onRoleSelect(selectedRole)
+      console.log('🚀 Submitting role selection:', selectedRole)
+      console.log('📊 Current modal state before submission:', {
+        selectedRole,
+        userEmail,
+        isOpen
+      })
       
-      // Force navigation to the correct dashboard after role selection
-      // This helps with Google OAuth flow where the redirection might not happen automatically
-      if (selectedRole === 'patient') {
-        window.location.href = '/patient-dashboard'
-      } else {
-        window.location.href = '/doctor-dashboard'
-      }
+      const result = await onRoleSelect(selectedRole)
+      console.log('✅ Role selection completed:', result)
+      
     } catch (error) {
-      console.error('Error selecting role:', error)
+      console.error('❌ Error selecting role:', error)
+      
+      // Show user-friendly error with recovery options
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
+      
+      if (confirm(`Authentication failed: ${errorMessage}\n\nWould you like to try a manual workaround?\n\nClick OK to refresh and try again, or Cancel to stay here.`)) {
+        // Force refresh to reset authentication state
+        window.location.reload()
+      }
     } finally {
       setLoading(false)
     }
