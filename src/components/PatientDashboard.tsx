@@ -19,7 +19,7 @@ import VitalChart from './VitalChart';
 import MedicationTracker from './MedicationTracker';
 import { useAuth } from '../contexts/AuthContext';
 import { vitalReadingsService } from '../lib/database';
-import { showErrorToast, showVitalSavedToast, showValidationErrorToast } from '../utils/toast';
+import { showErrorToast, showVitalSavedToast, showValidationErrorToast, showSuccessToast } from '../utils/toast';
 import LoadingSpinner from './LoadingSpinner';
 
 interface VitalReading {
@@ -73,6 +73,13 @@ const PatientDashboard: React.FC = () => {
     bloodSugar: '',
     heartRate: '',
     temperature: ''
+  });
+
+  const [newAppointment, setNewAppointment] = useState({
+    type: 'Regular Checkup',
+    date: '',
+    time: '09:00',
+    notes: ''
   });
 
   const [showAddForm, setShowAddForm] = useState(false);
@@ -269,6 +276,68 @@ const PatientDashboard: React.FC = () => {
     } catch (error) {
       console.error('Error saving vital reading:', error);
       showErrorToast('Failed to save reading. Please check your connection and try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleScheduleAppointment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!user?.id || submitting) return;
+
+    // Validation
+    if (!newAppointment.date) {
+      showErrorToast('Please select a date');
+      return;
+    }
+
+    // Check if date is in the future
+    const selectedDate = new Date(newAppointment.date + 'T' + newAppointment.time);
+    if (selectedDate <= new Date()) {
+      showErrorToast('Please select a future date and time');
+      return;
+    }
+
+    setSubmitting(true);
+    
+    try {
+      // For now, we'll create a mock appointment since we need a doctor_id
+      // In a real implementation, you'd have logic to assign to a doctor
+      const appointmentData = {
+        patient_id: user.id,
+        doctor_id: 'pending', // Will be assigned by admin/doctor
+        title: newAppointment.type,
+        description: newAppointment.notes || '',
+        appointment_date: selectedDate.toISOString(),
+        duration_minutes: 30,
+        status: 'scheduled' as const,
+        notes: newAppointment.notes
+      };
+
+      // For now, add to local state (we'll implement database save later)
+      const newAppointmentLocal: Appointment = {
+        id: Date.now().toString(),
+        title: newAppointment.type,
+        date: newAppointment.date,
+        time: newAppointment.time,
+        doctor: 'Dr. Smith', // Mock doctor
+        status: 'scheduled',
+        notes: newAppointment.notes
+      };
+
+      setAppointments([newAppointmentLocal, ...appointments]);
+      setNewAppointment({
+        type: 'Regular Checkup',
+        date: '',
+        time: '09:00',
+        notes: ''
+      });
+      setShowScheduleForm(false);
+      showSuccessToast('Appointment request submitted successfully!');
+    } catch (error) {
+      console.error('Error scheduling appointment:', error);
+      showErrorToast('Failed to schedule appointment. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -1025,16 +1094,21 @@ const PatientDashboard: React.FC = () => {
               <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
                 <div className="bg-white rounded-lg p-6 w-full max-w-md">
                   <h3 className="text-lg font-medium text-gray-900 mb-4">Schedule New Appointment</h3>
-                  <form className="space-y-4">
+                  <form onSubmit={handleScheduleAppointment} className="space-y-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Appointment Type
                       </label>
-                      <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      <select 
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        value={newAppointment.type}
+                        onChange={(e) => setNewAppointment({...newAppointment, type: e.target.value})}
+                      >
                         <option>Regular Checkup</option>
                         <option>Follow-up Visit</option>
                         <option>Consultation</option>
                         <option>Lab Work</option>
+                        <option>Emergency Consultation</option>
                       </select>
                     </div>
                     <div>
@@ -1044,19 +1118,27 @@ const PatientDashboard: React.FC = () => {
                       <input 
                         type="date" 
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        value={newAppointment.date}
+                        onChange={(e) => setNewAppointment({...newAppointment, date: e.target.value})}
+                        min={new Date().toISOString().split('T')[0]}
+                        required
                       />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Preferred Time
                       </label>
-                      <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        <option>9:00 AM</option>
-                        <option>10:00 AM</option>
-                        <option>11:00 AM</option>
-                        <option>2:00 PM</option>
-                        <option>3:00 PM</option>
-                        <option>4:00 PM</option>
+                      <select 
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        value={newAppointment.time}
+                        onChange={(e) => setNewAppointment({...newAppointment, time: e.target.value})}
+                      >
+                        <option value="09:00">9:00 AM</option>
+                        <option value="10:00">10:00 AM</option>
+                        <option value="11:00">11:00 AM</option>
+                        <option value="14:00">2:00 PM</option>
+                        <option value="15:00">3:00 PM</option>
+                        <option value="16:00">4:00 PM</option>
                       </select>
                     </div>
                     <div>
@@ -1067,6 +1149,8 @@ const PatientDashboard: React.FC = () => {
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                         rows={3}
                         placeholder="Any specific concerns or requests..."
+                        value={newAppointment.notes}
+                        onChange={(e) => setNewAppointment({...newAppointment, notes: e.target.value})}
                       />
                     </div>
                     <div className="flex space-x-3 pt-4">
@@ -1074,14 +1158,16 @@ const PatientDashboard: React.FC = () => {
                         type="button"
                         onClick={() => setShowScheduleForm(false)}
                         className="flex-1 py-2 px-4 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                        disabled={submitting}
                       >
                         Cancel
                       </button>
                       <button
                         type="submit"
-                        className="flex-1 py-2 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                        className="flex-1 py-2 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                        disabled={submitting}
                       >
-                        Request Appointment
+                        {submitting ? 'Requesting...' : 'Request Appointment'}
                       </button>
                     </div>
                   </form>
