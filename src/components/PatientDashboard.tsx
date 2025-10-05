@@ -18,7 +18,7 @@ import {
 import VitalChart from './VitalChart';
 import MedicationTracker from './MedicationTracker';
 import { useAuth } from '../contexts/AuthContext';
-import { vitalReadingsService } from '../lib/database';
+import { vitalReadingsService, appointmentsService } from '../lib/database';
 import { showErrorToast, showVitalSavedToast, showValidationErrorToast, showSuccessToast } from '../utils/toast';
 import LoadingSpinner from './LoadingSpinner';
 
@@ -119,28 +119,59 @@ const PatientDashboard: React.FC = () => {
   };
 
   const loadAppointments = async () => {
-    // For now, load sample appointments - can be replaced with real API calls
-    const sampleAppointments: Appointment[] = [
-      {
-        id: '1',
-        title: 'Regular Checkup',
-        date: '2025-10-10',
-        time: '10:00 AM',
-        doctor: 'Dr. Smith',
-        status: 'scheduled',
-        notes: 'Annual physical examination'
-      },
-      {
-        id: '2',
-        title: 'Blood Work Follow-up',
-        date: '2025-10-15',
-        time: '2:30 PM',
-        doctor: 'Dr. Johnson',
-        status: 'scheduled',
-        notes: 'Review blood test results'
-      }
-    ];
-    setAppointments(sampleAppointments);
+    try {
+      if (!user?.id) return;
+      
+      console.log('Loading appointments for patient:', user.id);
+      const dbAppointments = await appointmentsService.getByUserId(user.id, 'patient');
+      
+      // Transform database appointments to component format
+      const transformedAppointments: Appointment[] = dbAppointments.map(apt => {
+        const appointmentDate = new Date(apt.appointment_date);
+        const doctorInfo = Array.isArray(apt.doctor) ? apt.doctor[0] : apt.doctor;
+        
+        return {
+          id: apt.id,
+          title: apt.title,
+          date: appointmentDate.toISOString().split('T')[0],
+          time: appointmentDate.toLocaleTimeString('en-US', { 
+            hour: 'numeric', 
+            minute: '2-digit', 
+            hour12: true 
+          }),
+          doctor: doctorInfo?.full_name || 'Doctor TBD',
+          status: apt.status,
+          notes: apt.notes || undefined
+        };
+      });
+      
+      setAppointments(transformedAppointments);
+      console.log('Appointments loaded:', transformedAppointments.length);
+    } catch (error) {
+      console.error('Error loading appointments:', error);
+      // Fallback to sample data if database fails
+      const sampleAppointments: Appointment[] = [
+        {
+          id: '1',
+          title: 'Regular Checkup',
+          date: '2025-10-10',
+          time: '10:00 AM',
+          doctor: 'Dr. Smith',
+          status: 'scheduled',
+          notes: 'Annual physical examination'
+        },
+        {
+          id: '2',
+          title: 'Blood Work Follow-up',
+          date: '2025-10-15',
+          time: '2:30 PM',
+          doctor: 'Dr. Johnson',
+          status: 'scheduled',
+          notes: 'Review blood test results'
+        }
+      ];
+      setAppointments(sampleAppointments);
+    }
   };
 
   const loadMessages = async () => {
@@ -302,11 +333,10 @@ const PatientDashboard: React.FC = () => {
     setSubmitting(true);
     
     try {
-      // For now, we'll create a mock appointment since we need a doctor_id
-      // In a real implementation, you'd have logic to assign to a doctor
+      // Create appointment in database
       const appointmentData = {
         patient_id: user.id,
-        doctor_id: 'pending', // Will be assigned by admin/doctor
+        doctor_id: '', // Will be assigned by admin/doctor later
         title: newAppointment.type,
         description: newAppointment.notes || '',
         appointment_date: selectedDate.toISOString(),
@@ -315,13 +345,16 @@ const PatientDashboard: React.FC = () => {
         notes: newAppointment.notes
       };
 
-      // For now, add to local state (we'll implement database save later)
+      // Save to database
+      const savedAppointment = await appointmentsService.create(appointmentData);
+      
+      // Add to local state
       const newAppointmentLocal: Appointment = {
-        id: Date.now().toString(),
+        id: savedAppointment.id,
         title: newAppointment.type,
         date: newAppointment.date,
         time: newAppointment.time,
-        doctor: 'Dr. Smith', // Mock doctor
+        doctor: 'Doctor TBD', // Will be assigned later
         status: 'scheduled',
         notes: newAppointment.notes
       };
@@ -1104,11 +1137,11 @@ const PatientDashboard: React.FC = () => {
                         value={newAppointment.type}
                         onChange={(e) => setNewAppointment({...newAppointment, type: e.target.value})}
                       >
-                        <option>Regular Checkup</option>
-                        <option>Follow-up Visit</option>
-                        <option>Consultation</option>
-                        <option>Lab Work</option>
-                        <option>Emergency Consultation</option>
+                        <option value="Regular Checkup">Regular Checkup</option>
+                        <option value="Follow-up Visit">Follow-up Visit</option>
+                        <option value="Consultation">Consultation</option>
+                        <option value="Lab Work">Lab Work</option>
+                        <option value="Emergency Consultation">Emergency Consultation</option>
                       </select>
                     </div>
                     <div>

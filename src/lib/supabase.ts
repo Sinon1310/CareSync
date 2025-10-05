@@ -188,6 +188,50 @@ export type Database = {
           created_at?: string
         }
       }
+      appointments: {
+        Row: {
+          id: string
+          doctor_id: string
+          patient_id: string
+          title: string
+          description: string | null
+          appointment_date: string
+          duration_minutes: number
+          status: 'scheduled' | 'completed' | 'cancelled' | 'rescheduled'
+          meeting_link: string | null
+          notes: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          doctor_id: string
+          patient_id: string
+          title: string
+          description?: string | null
+          appointment_date: string
+          duration_minutes?: number
+          status?: 'scheduled' | 'completed' | 'cancelled' | 'rescheduled'
+          meeting_link?: string | null
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          doctor_id?: string
+          patient_id?: string
+          title?: string
+          description?: string | null
+          appointment_date?: string
+          duration_minutes?: number
+          status?: 'scheduled' | 'completed' | 'cancelled' | 'rescheduled'
+          meeting_link?: string | null
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
     }
   }
 }
@@ -196,3 +240,4 @@ export type VitalReading = Database['public']['Tables']['vital_readings']['Row']
 export type Profile = Database['public']['Tables']['profiles']['Row']
 export type DoctorPatient = Database['public']['Tables']['doctor_patients']['Row']
 export type Message = Database['public']['Tables']['messages']['Row']
+export type Appointment = Database['public']['Tables']['appointments']['Row']

@@ -297,10 +297,13 @@ export const appointmentsService = {
   },
 
   // Create appointment
-  async create(appointment: Omit<Appointment, 'id' | 'created_at'>) {
+  async create(appointment: Omit<Appointment, 'id' | 'created_at' | 'updated_at'>) {
     const { data, error } = await supabase
       .from('appointments')
-      .insert(appointment)
+      .insert({
+        ...appointment,
+        updated_at: new Date().toISOString()
+      })
       .select()
       .single()
 
