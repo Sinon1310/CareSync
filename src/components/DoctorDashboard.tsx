@@ -378,20 +378,7 @@ const DoctorDashboard: React.FC = () => {
 
   const acceptAppointmentRequest = async (appointmentId: string) => {
     try {
-      const { error } = await supabase
-        .from('appointments')
-        .update({ 
-          doctor_id: user?.id,
-          status: 'scheduled'
-        })
-        .eq('id', appointmentId);
-
-      if (error) {
-        console.error('Error accepting appointment:', error);
-        toast.error('Failed to accept appointment');
-        return;
-      }
-
+      await appointmentsService.updateStatus(appointmentId, 'scheduled');
       toast.success('Appointment accepted successfully!');
       loadAppointments(); // Reload to show updated data
     } catch (error) {
@@ -418,6 +405,108 @@ const DoctorDashboard: React.FC = () => {
     } catch (error) {
       console.error('Error updating appointment status:', error);
       toast.error('Failed to update appointment');
+    }
+  };
+
+  const handleScheduleAppointment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!user?.id) {
+      toast.error('User not authenticated');
+      return;
+    }
+
+    if (!newAppointment.patientId || !newAppointment.title || !newAppointment.date || !newAppointment.time) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+
+    try {
+      const selectedDate = new Date(newAppointment.date + 'T' + newAppointment.time);
+      
+      const appointmentData = {
+        doctor_id: user.id,
+        patient_id: newAppointment.patientId,
+        title: newAppointment.title,
+        description: newAppointment.description || '',
+        appointment_date: selectedDate.toISOString(),
+        duration_minutes: newAppointment.duration,
+        status: 'scheduled' as const
+      };
+
+      await appointmentsService.create(appointmentData);
+
+      toast.success('Appointment scheduled successfully!');
+      setShowScheduleModal(false);
+      setNewAppointment({
+        patientId: '',
+        title: '',
+        description: '',
+        date: '',
+        time: '',
+        duration: 30
+      });
+      loadAppointments(); // Reload appointments
+    } catch (error) {
+      console.error('Error scheduling appointment:', error);
+      toast.error('Failed to schedule appointment');
+    }
+  };
+
+  const handleAddPatient = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!user?.id || !newPatientEmail.trim()) return;
+
+    try {
+      // First, find the patient by email
+      const { data: patientData, error: patientError } = await supabase
+        .from('profiles')
+        .select('id, full_name, email')
+        .eq('email', newPatientEmail.trim())
+        .eq('role', 'patient')
+        .single();
+
+      if (patientError || !patientData) {
+        toast.error('Patient not found. Please check the email address.');
+        return;
+      }
+
+      // Check if relationship already exists
+      const { data: existingRelation } = await supabase
+        .from('doctor_patient_relationships')
+        .select('id')
+        .eq('doctor_id', user.id)
+        .eq('patient_id', patientData.id)
+        .single();
+
+      if (existingRelation) {
+        toast.error('This patient is already in your patient list.');
+        return;
+      }
+
+      // Create doctor-patient relationship
+      const { error: relationError } = await supabase
+        .from('doctor_patient_relationships')
+        .insert([{
+          doctor_id: user.id,
+          patient_id: patientData.id,
+          status: 'active'
+        }]);
+
+      if (relationError) {
+        console.error('Error creating relationship:', relationError);
+        toast.error('Failed to add patient. Please try again.');
+        return;
+      }
+
+      toast.success(`${patientData.full_name} has been added to your patient list!`);
+      setShowAddPatientModal(false);
+      setNewPatientEmail('');
+      loadPatients(); // Reload patients list
+    } catch (error) {
+      console.error('Error adding patient:', error);
+      toast.error('Failed to add patient. Please try again.');
     }
   };
 
@@ -641,7 +730,10 @@ const DoctorDashboard: React.FC = () => {
           <div className="space-y-6">
             <div className="flex justify-between items-center">
               <h2 className="text-2xl font-bold text-gray-900">My Patients</h2>
-              <button className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center space-x-2">
+              <button 
+                onClick={() => setShowAddPatientModal(true)}
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center space-x-2"
+              >
                 <UserPlus className="h-5 w-5" />
                 <span>Add Patient</span>
               </button>
@@ -697,9 +789,27 @@ const DoctorDashboard: React.FC = () => {
                           {patient.lastVitalReading || 'No readings yet'}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                          <button className="text-blue-600 hover:text-blue-900">View</button>
-                          <button className="text-green-600 hover:text-green-900">Message</button>
-                          <button className="text-purple-600 hover:text-purple-900">Schedule</button>
+                          <button 
+                            onClick={() => setSelectedPatient(patient)}
+                            className="text-blue-600 hover:text-blue-900"
+                          >
+                            View
+                          </button>
+                          <button 
+                            onClick={() => toast('Messaging feature coming soon!', { icon: 'ℹ️' })}
+                            className="text-green-600 hover:text-green-900"
+                          >
+                            Message
+                          </button>
+                          <button 
+                            onClick={() => {
+                              setNewAppointment({...newAppointment, patientId: patient.id});
+                              setShowScheduleModal(true);
+                            }}
+                            className="text-purple-600 hover:text-purple-900"
+                          >
+                            Schedule
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -849,7 +959,10 @@ const DoctorDashboard: React.FC = () => {
           <div className="space-y-6">
             <div className="flex justify-between items-center">
               <h2 className="text-2xl font-bold text-gray-900">Appointments Management</h2>
-              <button className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center space-x-2">
+              <button 
+                onClick={() => setShowScheduleModal(true)}
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center space-x-2"
+              >
                 <Plus className="h-5 w-5" />
                 <span>Schedule Appointment</span>
               </button>
@@ -1027,6 +1140,281 @@ const DoctorDashboard: React.FC = () => {
           </div>
         )}
       </main>
+
+      {/* Add Patient Modal */}
+      {showAddPatientModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Add New Patient</h3>
+            <form onSubmit={handleAddPatient} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Patient Email
+                </label>
+                <input
+                  type="email"
+                  value={newPatientEmail}
+                  onChange={(e) => setNewPatientEmail(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="patient@example.com"
+                  required
+                />
+                <p className="text-sm text-gray-500 mt-1">
+                  Enter the email of an existing patient to add them to your patient list.
+                </p>
+              </div>
+              <div className="flex space-x-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAddPatientModal(false);
+                    setNewPatientEmail('');
+                  }}
+                  className="flex-1 py-2 px-4 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                >
+                  Add Patient
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Patient Detail Modal */}
+      {selectedPatient && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-screen overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-medium text-gray-900">Patient Details</h3>
+              <button
+                onClick={() => setSelectedPatient(null)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <span className="sr-only">Close</span>
+                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <div className="space-y-6">
+              {/* Patient Info */}
+              <div className="bg-gray-50 rounded-lg p-4">
+                <h4 className="font-medium text-gray-900 mb-3">Patient Information</h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium text-gray-500">Name</label>
+                    <p className="text-gray-900">{selectedPatient.full_name}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-500">Email</label>
+                    <p className="text-gray-900">{selectedPatient.email}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-500">Status</label>
+                    <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
+                      selectedPatient.status === 'normal' ? 'bg-green-100 text-green-800' :
+                      selectedPatient.status === 'warning' ? 'bg-yellow-100 text-yellow-800' :
+                      'bg-red-100 text-red-800'
+                    }`}>
+                      {selectedPatient.status.charAt(0).toUpperCase() + selectedPatient.status.slice(1)}
+                    </span>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-500">Last Reading</label>
+                    <p className="text-gray-900">{selectedPatient.lastVitalReading || 'No readings yet'}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Latest Vitals */}
+              {selectedPatient.latestVitals && (
+                <div className="bg-blue-50 rounded-lg p-4">
+                  <h4 className="font-medium text-gray-900 mb-3">Latest Vital Signs</h4>
+                  <div className="grid grid-cols-2 gap-4">
+                    {selectedPatient.latestVitals.systolic && selectedPatient.latestVitals.diastolic && (
+                      <div>
+                        <label className="text-sm font-medium text-gray-500">Blood Pressure</label>
+                        <p className="text-gray-900">{selectedPatient.latestVitals.systolic}/{selectedPatient.latestVitals.diastolic} mmHg</p>
+                      </div>
+                    )}
+                    {selectedPatient.latestVitals.heartRate && (
+                      <div>
+                        <label className="text-sm font-medium text-gray-500">Heart Rate</label>
+                        <p className="text-gray-900">{selectedPatient.latestVitals.heartRate} BPM</p>
+                      </div>
+                    )}
+                    {selectedPatient.latestVitals.bloodSugar && (
+                      <div>
+                        <label className="text-sm font-medium text-gray-500">Blood Sugar</label>
+                        <p className="text-gray-900">{selectedPatient.latestVitals.bloodSugar} mg/dL</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Quick Actions */}
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => {
+                    setNewAppointment({...newAppointment, patientId: selectedPatient.id});
+                    setSelectedPatient(null);
+                    setShowScheduleModal(true);
+                  }}
+                  className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+                >
+                  Schedule Appointment
+                </button>
+                <button
+                  onClick={() => toast('Messaging feature coming soon!', { icon: 'ℹ️' })}
+                  className="flex-1 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
+                >
+                  Send Message
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Schedule Appointment Modal */}
+      {showScheduleModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Schedule New Appointment</h3>
+            <form onSubmit={handleScheduleAppointment} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Select Patient
+                </label>
+                <select
+                  value={newAppointment.patientId}
+                  onChange={(e) => setNewAppointment({...newAppointment, patientId: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                >
+                  <option value="">Choose a patient...</option>
+                  {patients.map(patient => (
+                    <option key={patient.id} value={patient.id}>
+                      {patient.full_name} ({patient.email})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Appointment Type
+                </label>
+                <select
+                  value={newAppointment.title}
+                  onChange={(e) => setNewAppointment({...newAppointment, title: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                >
+                  <option value="">Select type...</option>
+                  <option value="Regular Checkup">Regular Checkup</option>
+                  <option value="Follow-up Visit">Follow-up Visit</option>
+                  <option value="Consultation">Consultation</option>
+                  <option value="Lab Work Review">Lab Work Review</option>
+                  <option value="Emergency Consultation">Emergency Consultation</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Date
+                </label>
+                <input
+                  type="date"
+                  value={newAppointment.date}
+                  onChange={(e) => setNewAppointment({...newAppointment, date: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  min={new Date().toISOString().split('T')[0]}
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Time
+                </label>
+                <select
+                  value={newAppointment.time}
+                  onChange={(e) => setNewAppointment({...newAppointment, time: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                >
+                  <option value="">Select time...</option>
+                  <option value="09:00">9:00 AM</option>
+                  <option value="10:00">10:00 AM</option>
+                  <option value="11:00">11:00 AM</option>
+                  <option value="14:00">2:00 PM</option>
+                  <option value="15:00">3:00 PM</option>
+                  <option value="16:00">4:00 PM</option>
+                  <option value="17:00">5:00 PM</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Duration (minutes)
+                </label>
+                <select
+                  value={newAppointment.duration}
+                  onChange={(e) => setNewAppointment({...newAppointment, duration: parseInt(e.target.value)})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value={15}>15 minutes</option>
+                  <option value={30}>30 minutes</option>
+                  <option value={45}>45 minutes</option>
+                  <option value={60}>1 hour</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Description (Optional)
+                </label>
+                <textarea
+                  value={newAppointment.description}
+                  onChange={(e) => setNewAppointment({...newAppointment, description: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  rows={3}
+                  placeholder="Any specific notes or concerns..."
+                />
+              </div>
+              <div className="flex space-x-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowScheduleModal(false);
+                    setNewAppointment({
+                      patientId: '',
+                      title: '',
+                      description: '',
+                      date: '',
+                      time: '',
+                      duration: 30
+                    });
+                  }}
+                  className="flex-1 py-2 px-4 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                >
+                  Schedule Appointment
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
