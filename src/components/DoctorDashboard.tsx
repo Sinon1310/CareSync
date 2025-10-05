@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
+import { appointmentsService } from '../lib/database';
 import toast from 'react-hot-toast';
 
 interface Patient {
@@ -63,12 +64,13 @@ interface Medication {
 
 interface Appointment {
   id: string;
+  doctor_id: string;
+  patient_id: string;
   title: string;
   description: string;
   appointment_date: string;
   duration_minutes: number;
   status: string;
-  patient_id: string;
   patient_name?: string;
   notes?: string;
 }
@@ -342,7 +344,7 @@ const DoctorDashboard: React.FC = () => {
 
   const loadAppointments = async () => {
     try {
-      // Get appointments for this doctor
+      // Get appointments for this doctor AND pending requests
       const { data, error } = await supabase
         .from('appointments')
         .select(`
@@ -351,7 +353,7 @@ const DoctorDashboard: React.FC = () => {
             full_name
           )
         `)
-        .eq('doctor_id', user?.id)
+        .or(`doctor_id.eq.${user?.id},doctor_id.eq.`)
         .order('appointment_date', { ascending: true });
 
       if (error) {
@@ -371,6 +373,51 @@ const DoctorDashboard: React.FC = () => {
       console.log('Appointments loaded:', transformedAppointments.length);
     } catch (error) {
       console.error('Error in loadAppointments:', error);
+    }
+  };
+
+  const acceptAppointmentRequest = async (appointmentId: string) => {
+    try {
+      const { error } = await supabase
+        .from('appointments')
+        .update({ 
+          doctor_id: user?.id,
+          status: 'scheduled'
+        })
+        .eq('id', appointmentId);
+
+      if (error) {
+        console.error('Error accepting appointment:', error);
+        toast.error('Failed to accept appointment');
+        return;
+      }
+
+      toast.success('Appointment accepted successfully!');
+      loadAppointments(); // Reload to show updated data
+    } catch (error) {
+      console.error('Error accepting appointment:', error);
+      toast.error('Failed to accept appointment');
+    }
+  };
+
+  const updateAppointmentStatus = async (appointmentId: string, newStatus: string) => {
+    try {
+      const { error } = await supabase
+        .from('appointments')
+        .update({ status: newStatus })
+        .eq('id', appointmentId);
+
+      if (error) {
+        console.error('Error updating appointment status:', error);
+        toast.error('Failed to update appointment');
+        return;
+      }
+
+      toast.success(`Appointment ${newStatus} successfully!`);
+      loadAppointments(); // Reload to show updated data
+    } catch (error) {
+      console.error('Error updating appointment status:', error);
+      toast.error('Failed to update appointment');
     }
   };
 
@@ -801,14 +848,91 @@ const DoctorDashboard: React.FC = () => {
         {activeTab === 'appointments' && (
           <div className="space-y-6">
             <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-bold text-gray-900">Appointments</h2>
+              <h2 className="text-2xl font-bold text-gray-900">Appointments Management</h2>
               <button className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center space-x-2">
                 <Plus className="h-5 w-5" />
                 <span>Schedule Appointment</span>
               </button>
             </div>
+
+            {/* Pending Requests Section */}
+            {appointments.filter(apt => !apt.doctor_id || apt.doctor_id === '').length > 0 && (
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+                <div className="px-6 py-4 border-b border-gray-200">
+                  <h3 className="text-lg font-medium text-gray-900 flex items-center">
+                    <Bell className="h-5 w-5 text-orange-500 mr-2" />
+                    Pending Appointment Requests ({appointments.filter(apt => !apt.doctor_id || apt.doctor_id === '').length})
+                  </h3>
+                </div>
+                <div className="overflow-hidden">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-orange-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Patient
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Appointment
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Requested Date
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Duration
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {appointments.filter(apt => !apt.doctor_id || apt.doctor_id === '').map(appointment => (
+                        <tr key={appointment.id} className="hover:bg-orange-25">
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            {appointment.patient_name}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div>
+                              <div className="text-sm font-medium text-gray-900">{appointment.title}</div>
+                              <div className="text-sm text-gray-500">{appointment.description}</div>
+                              {appointment.notes && (
+                                <div className="text-sm text-gray-400 mt-1">Note: {appointment.notes}</div>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {formatDate(appointment.appointment_date)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {appointment.duration_minutes} min
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                            <button
+                              onClick={() => acceptAppointmentRequest(appointment.id)}
+                              className="bg-green-600 text-white px-3 py-1 rounded text-xs hover:bg-green-700"
+                            >
+                              Accept
+                            </button>
+                            <button
+                              onClick={() => updateAppointmentStatus(appointment.id, 'cancelled')}
+                              className="bg-red-600 text-white px-3 py-1 rounded text-xs hover:bg-red-700"
+                            >
+                              Decline
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
             
+            {/* Scheduled Appointments */}
             <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+              <div className="px-6 py-4 border-b border-gray-200">
+                <h3 className="text-lg font-medium text-gray-900">My Scheduled Appointments</h3>
+              </div>
               <div className="overflow-hidden">
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
@@ -828,10 +952,13 @@ const DoctorDashboard: React.FC = () => {
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Status
                       </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Actions
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {appointments.map(appointment => (
+                    {appointments.filter(apt => apt.doctor_id && apt.doctor_id !== '').map(appointment => (
                       <tr key={appointment.id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                           {appointment.patient_name}
@@ -852,20 +979,47 @@ const DoctorDashboard: React.FC = () => {
                           <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                             appointment.status === 'scheduled' ? 'text-blue-600 bg-blue-100' :
                             appointment.status === 'completed' ? 'text-green-600 bg-green-100' :
+                            appointment.status === 'cancelled' ? 'text-red-600 bg-red-100' :
                             'text-gray-600 bg-gray-100'
                           }`}>
                             {appointment.status}
                           </span>
                         </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                          {appointment.status === 'scheduled' && (
+                            <>
+                              <button
+                                onClick={() => updateAppointmentStatus(appointment.id, 'completed')}
+                                className="bg-green-600 text-white px-3 py-1 rounded text-xs hover:bg-green-700"
+                              >
+                                Complete
+                              </button>
+                              <button
+                                onClick={() => updateAppointmentStatus(appointment.id, 'cancelled')}
+                                className="bg-red-600 text-white px-3 py-1 rounded text-xs hover:bg-red-700"
+                              >
+                                Cancel
+                              </button>
+                            </>
+                          )}
+                          {appointment.status === 'cancelled' && (
+                            <button
+                              onClick={() => updateAppointmentStatus(appointment.id, 'scheduled')}
+                              className="bg-blue-600 text-white px-3 py-1 rounded text-xs hover:bg-blue-700"
+                            >
+                              Reschedule
+                            </button>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-                {appointments.length === 0 && (
+                {appointments.filter(apt => apt.doctor_id && apt.doctor_id !== '').length === 0 && (
                   <div className="text-center py-8">
                     <Calendar className="mx-auto h-12 w-12 text-gray-400" />
-                    <h3 className="mt-2 text-sm font-medium text-gray-900">No appointments</h3>
-                    <p className="mt-1 text-sm text-gray-500">Schedule your first appointment to get started</p>
+                    <h3 className="mt-2 text-sm font-medium text-gray-900">No scheduled appointments</h3>
+                    <p className="mt-1 text-sm text-gray-500">Accepted appointment requests will appear here</p>
                   </div>
                 )}
               </div>
