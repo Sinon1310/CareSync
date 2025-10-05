@@ -228,7 +228,14 @@ const DoctorDashboard: React.FC = () => {
   };
 
   const loadPatients = async () => {
+    if (!user?.id) {
+      console.log('No user ID available for loading patients');
+      return;
+    }
+
     try {
+      console.log('Loading patients for doctor:', user.id);
+      
       // Get patients assigned to this doctor through doctor_patient_relationships
       const { data, error } = await supabase
         .from('doctor_patient_relationships')
@@ -248,14 +255,27 @@ const DoctorDashboard: React.FC = () => {
 
       if (error) {
         console.error('Error loading patients:', error);
+        toast.error('Failed to load patients');
         return;
       }
 
-      console.log('Loaded patients data:', data);
+      console.log('Raw patients data from database:', data);
+
+      if (!data || data.length === 0) {
+        console.log('No patients found for this doctor. You may need to create doctor-patient relationships.');
+        setPatients([]);
+        return;
+      }
 
       // Transform the data to match our Patient interface
       const transformedPatients: Patient[] = data?.map(relationship => {
         const profile = Array.isArray(relationship.profiles) ? relationship.profiles[0] : relationship.profiles;
+        
+        if (!profile) {
+          console.warn('Missing profile data for relationship:', relationship);
+          return null;
+        }
+        
         return {
           id: profile.id,
           full_name: profile.full_name,
@@ -265,12 +285,13 @@ const DoctorDashboard: React.FC = () => {
           relationshipId: relationship.id,
           relationshipStatus: relationship.status
         };
-      }) || [];
+      }).filter(Boolean) as Patient[];
 
       setPatients(transformedPatients);
-      console.log('Patients loaded:', transformedPatients);
+      console.log('Patients loaded successfully:', transformedPatients.length, 'patients');
     } catch (error) {
       console.error('Error in loadPatients:', error);
+      toast.error('Failed to load patients');
     }
   };
 
@@ -344,7 +365,7 @@ const DoctorDashboard: React.FC = () => {
 
   const loadAppointments = async () => {
     try {
-      // Get appointments for this doctor AND pending requests
+      // Get appointments for this doctor (both scheduled and pending requests)
       const { data, error } = await supabase
         .from('appointments')
         .select(`
@@ -353,7 +374,7 @@ const DoctorDashboard: React.FC = () => {
             full_name
           )
         `)
-        .or(`doctor_id.eq.${user?.id},doctor_id.eq.`)
+        .or(`doctor_id.eq.${user?.id},doctor_id.is.null`)
         .order('appointment_date', { ascending: true });
 
       if (error) {
@@ -371,6 +392,7 @@ const DoctorDashboard: React.FC = () => {
 
       setAppointments(transformedAppointments);
       console.log('Appointments loaded:', transformedAppointments.length);
+      console.log('Appointments data:', transformedAppointments);
     } catch (error) {
       console.error('Error in loadAppointments:', error);
     }
@@ -424,6 +446,18 @@ const DoctorDashboard: React.FC = () => {
     try {
       const selectedDate = new Date(newAppointment.date + 'T' + newAppointment.time);
       
+      // Validate the date
+      if (isNaN(selectedDate.getTime())) {
+        toast.error('Invalid date or time selected');
+        return;
+      }
+
+      // Check if the date is in the future
+      if (selectedDate <= new Date()) {
+        toast.error('Please select a future date and time');
+        return;
+      }
+
       const appointmentData = {
         doctor_id: user.id,
         patient_id: newAppointment.patientId,
@@ -434,9 +468,14 @@ const DoctorDashboard: React.FC = () => {
         status: 'scheduled' as const
       };
 
-      await appointmentsService.create(appointmentData);
+      console.log('Creating appointment with data:', appointmentData);
 
+      // Use the service method for better error handling
+      const createdAppointment = await appointmentsService.create(appointmentData);
+      console.log('Appointment created successfully:', createdAppointment);
+      
       toast.success('Appointment scheduled successfully!');
+
       setShowScheduleModal(false);
       setNewAppointment({
         patientId: '',
@@ -446,10 +485,11 @@ const DoctorDashboard: React.FC = () => {
         time: '',
         duration: 30
       });
-      loadAppointments(); // Reload appointments
-    } catch (error) {
+      await loadAppointments(); // Reload appointments
+    } catch (error: any) {
       console.error('Error scheduling appointment:', error);
-      toast.error('Failed to schedule appointment');
+      const errorMessage = error?.message || 'Failed to schedule appointment';
+      toast.error(`Failed to schedule appointment: ${errorMessage}`);
     }
   };
 
@@ -1071,7 +1111,7 @@ const DoctorDashboard: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {appointments.filter(apt => apt.doctor_id && apt.doctor_id !== '').map(appointment => (
+                    {appointments.filter(apt => apt.doctor_id === user?.id).map(appointment => (
                       <tr key={appointment.id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                           {appointment.patient_name}
@@ -1301,12 +1341,21 @@ const DoctorDashboard: React.FC = () => {
                   required
                 >
                   <option value="">Choose a patient...</option>
-                  {patients.map(patient => (
-                    <option key={patient.id} value={patient.id}>
-                      {patient.full_name} ({patient.email})
-                    </option>
-                  ))}
+                  {patients.length === 0 ? (
+                    <option value="" disabled>No patients assigned yet</option>
+                  ) : (
+                    patients.map(patient => (
+                      <option key={patient.id} value={patient.id}>
+                        {patient.full_name} ({patient.email})
+                      </option>
+                    ))
+                  )}
                 </select>
+                {patients.length === 0 && (
+                  <p className="text-sm text-amber-600 mt-1">
+                    You need to have patients assigned to schedule appointments. Check the debugger above.
+                  </p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
