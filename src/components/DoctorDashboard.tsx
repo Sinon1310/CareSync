@@ -17,6 +17,9 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { appointmentsService } from '../lib/database';
+import NotificationBell from './NotificationBell';
+import RealTimeVitalMonitor from './RealTimeVitalMonitor';
+import NotificationService from '../services/notificationService';
 import toast from 'react-hot-toast';
 
 interface Patient {
@@ -101,8 +104,50 @@ const DoctorDashboard: React.FC = () => {
   useEffect(() => {
     if (user && profile?.role === 'doctor') {
       loadDashboardData();
+      setupRealtimeSubscriptions();
     }
   }, [user, profile]);
+
+  const setupRealtimeSubscriptions = () => {
+    // Subscribe to vital reading alerts
+    const vitalSubscription = NotificationService.subscribeToVitalAlerts();
+    
+    // Subscribe to appointment alerts
+    const appointmentSubscription = NotificationService.subscribeToAppointmentAlerts();
+
+    // Cleanup function
+    return () => {
+      vitalSubscription.unsubscribe();
+      appointmentSubscription.unsubscribe();
+    };
+  };
+
+  const testNotificationSystem = async () => {
+    if (!user?.id) return;
+    
+    try {
+      // Send a sample critical alert
+      await NotificationService.sendCriticalVitalAlert(
+        user.id,
+        'sample-patient-id',
+        'John Doe',
+        'blood_pressure',
+        '180/120'
+      );
+
+      // Send a welcome notification
+      await NotificationService.sendWelcomeNotification(
+        user.id,
+        'doctor',
+        profile?.full_name || 'Doctor'
+      );
+
+      toast.success('🔔 Sample notifications sent! Check the notification bell.');
+    } catch (error) {
+      console.error('Error sending test notifications:', error);
+      toast.error('Failed to send test notifications');
+    }
+  };
 
   const loadDashboardData = async () => {
     try {
@@ -598,7 +643,15 @@ const DoctorDashboard: React.FC = () => {
               <h1 className="text-xl font-semibold text-gray-900">Doctor Dashboard</h1>
             </div>
             <div className="flex items-center space-x-4">
-              <Bell className="h-6 w-6 text-gray-500 hover:text-gray-700 cursor-pointer" />
+              <button
+                onClick={testNotificationSystem}
+                className="bg-purple-600 text-white px-3 py-1.5 rounded-lg hover:bg-purple-700 text-sm flex items-center space-x-1"
+                title="Test notification system"
+              >
+                <Bell className="h-4 w-4" />
+                <span>Test Notifications</span>
+              </button>
+              <NotificationBell />
               <div className="flex items-center space-x-2">
                 <User className="h-6 w-6 text-gray-500" />
                 <span className="text-sm text-gray-700">Dr. {profile?.full_name || 'Doctor'}</span>
@@ -1464,6 +1517,9 @@ const DoctorDashboard: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Real-time Vital Monitor */}
+      <RealTimeVitalMonitor />
     </div>
   );
 };

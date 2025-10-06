@@ -69,24 +69,68 @@ export type Database = {
           created_at?: string
         }
       }
-      doctor_patients: {
+      doctor_patient_relationships: {
         Row: {
           id: string
           doctor_id: string
           patient_id: string
+          status: string
           created_at: string
         }
         Insert: {
           id?: string
           doctor_id: string
           patient_id: string
+          status?: string
           created_at?: string
         }
         Update: {
           id?: string
           doctor_id?: string
           patient_id?: string
+          status?: string
           created_at?: string
+        }
+      }
+      notifications: {
+        Row: {
+          id: string
+          user_id: string
+          title: string
+          message: string
+          type: 'critical' | 'warning' | 'info' | 'appointment' | 'medication' | 'system'
+          priority: 'low' | 'medium' | 'high' | 'critical'
+          read: boolean
+          action_url?: string | null
+          metadata?: any
+          created_at: string
+          expires_at?: string | null
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          title: string
+          message: string
+          type: 'critical' | 'warning' | 'info' | 'appointment' | 'medication' | 'system'
+          priority?: 'low' | 'medium' | 'high' | 'critical'
+          read?: boolean
+          action_url?: string | null
+          metadata?: any
+          created_at?: string
+          expires_at?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          title?: string
+          message?: string
+          type?: 'critical' | 'warning' | 'info' | 'appointment' | 'medication' | 'system'
+          priority?: 'low' | 'medium' | 'high' | 'critical'
+          read?: boolean
+          action_url?: string | null
+          metadata?: any
+          created_at?: string
+          expires_at?: string | null
         }
       }
       messages: {
@@ -238,6 +282,7 @@ export type Database = {
 
 export type VitalReading = Database['public']['Tables']['vital_readings']['Row']
 export type Profile = Database['public']['Tables']['profiles']['Row']
-export type DoctorPatient = Database['public']['Tables']['doctor_patients']['Row']
+export type DoctorPatient = Database['public']['Tables']['doctor_patient_relationships']['Row']
 export type Message = Database['public']['Tables']['messages']['Row']
 export type Appointment = Database['public']['Tables']['appointments']['Row']
+export type Notification = Database['public']['Tables']['notifications']['Row']

@@ -1,9 +1,11 @@
 
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
+import { NotificationProvider } from './contexts/NotificationContext'
 import LandingPage from './components/LandingPage'
 import PatientDashboard from './components/PatientDashboard'
 import DoctorDashboard from './components/DoctorDashboard'
+import NotificationTestDashboard from './components/NotificationTestDashboard'
 import AuthModal from './components/AuthModal'
 import RoleSelectionModal from './components/RoleSelectionModal'
 import ErrorBoundary from './components/ErrorBoundary'
@@ -74,6 +76,14 @@ const AppRoutes = () => {
             <Navigate to="/" replace />
           } 
         />
+        <Route 
+          path="/notifications" 
+          element={
+            user ? 
+            <NotificationTestDashboard /> : 
+            <Navigate to="/" replace />
+          } 
+        />
       </Routes>
 
       {showAuthModal && (
@@ -100,10 +110,12 @@ const App = () => {
   return (
     <ErrorBoundary>
       <AuthProvider>
-        <Router>
-          <AppRoutes />
-          <Toaster position="top-right" />
-        </Router>
+        <NotificationProvider>
+          <Router>
+            <AppRoutes />
+            <Toaster position="top-right" />
+          </Router>
+        </NotificationProvider>
       </AuthProvider>
     </ErrorBoundary>
   )

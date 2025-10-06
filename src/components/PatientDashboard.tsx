@@ -17,6 +17,8 @@ import {
 } from 'lucide-react';
 import VitalChart from './VitalChart';
 import MedicationTracker from './MedicationTracker';
+import NotificationBell from './NotificationBell';
+import NotificationService from '../services/notificationService';
 import { useAuth } from '../contexts/AuthContext';
 import { vitalReadingsService, appointmentsService } from '../lib/database';
 import { showErrorToast, showVitalSavedToast, showValidationErrorToast, showSuccessToast } from '../utils/toast';
@@ -195,6 +197,79 @@ const PatientDashboard: React.FC = () => {
       }
     ];
     setMessages(sampleMessages);
+  };
+
+  const testNotificationSystem = async () => {
+    if (!user?.id) return;
+    
+    try {
+      // Send medication reminder
+      await NotificationService.sendMedicationReminder(
+        user.id,
+        'sample-med-id',
+        'Lisinopril',
+        '10mg'
+      );
+
+      // Send appointment reminder
+      await NotificationService.sendAppointmentReminder(
+        user.id,
+        'sample-appointment-id',
+        'Dr. Johnson',
+        new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+      );
+
+      // Send welcome notification
+      await NotificationService.sendWelcomeNotification(
+        user.id,
+        'patient',
+        profile?.full_name || 'Patient'
+      );
+
+      showSuccessToast('🔔 Sample notifications sent! Check the notification bell.');
+    } catch (error) {
+      console.error('Error sending test notifications:', error);
+      showErrorToast('Failed to send test notifications');
+    }
+  };
+
+  const createCriticalVitalDemo = async () => {
+    if (!user?.id) return;
+
+    try {
+      setSubmitting(true);
+
+      // Create a critical blood pressure reading to trigger notifications
+      const criticalReading = {
+        user_id: user.id,
+        type: 'blood_pressure' as const,
+        value: '190/120',
+        systolic: 190,
+        diastolic: 120,
+        status: 'critical' as const,
+        recorded_at: new Date().toISOString()
+      };
+
+      console.log('Creating critical vital for demo:', criticalReading);
+      const dbReading = await vitalReadingsService.create(criticalReading);
+
+      // Add to local state
+      const newVitalReading: VitalReading = {
+        id: dbReading.id,
+        type: 'blood_pressure',
+        value: '190/120',
+        timestamp: new Date(dbReading.recorded_at || dbReading.created_at),
+        status: 'critical'
+      };
+
+      setReadings([newVitalReading, ...readings]);
+      showSuccessToast('🚨 Critical vital recorded! Your doctor will be notified immediately.');
+    } catch (error) {
+      console.error('Error creating critical vital demo:', error);
+      showErrorToast('Failed to create demo vital');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleSubmitReading = async (e: React.FormEvent) => {
@@ -503,6 +578,23 @@ const PatientDashboard: React.FC = () => {
               <p className="text-gray-600">Track your vital signs and monitor your health progress</p>
             </div>
             <div className="flex items-center gap-4">
+              <button
+                onClick={testNotificationSystem}
+                className="bg-purple-600 text-white px-3 py-1.5 rounded-lg hover:bg-purple-700 text-sm flex items-center space-x-1"
+                title="Test notification system"
+              >
+                <MessageCircle className="h-4 w-4" />
+                <span className="hidden sm:inline">Test Notifications</span>
+              </button>
+              <button
+                onClick={createCriticalVitalDemo}
+                className="bg-red-600 text-white px-3 py-1.5 rounded-lg hover:bg-red-700 text-sm flex items-center space-x-1"
+                title="Create critical vital demo"
+              >
+                <AlertTriangle className="h-4 w-4" />
+                <span className="hidden sm:inline">Demo Critical Vital</span>
+              </button>
+              <NotificationBell />
               <div className="flex items-center gap-3 text-sm text-gray-600">
                 <User className="h-4 w-4" />
                 <span>{user?.email}</span>
