@@ -18,7 +18,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { appointmentsService } from '../lib/database';
 import NotificationBell from './NotificationBell';
-import RealTimeVitalMonitor from './RealTimeVitalMonitor';
+import LiveVitalMonitor from './LiveVitalMonitor';
 import NotificationService from '../services/notificationService';
 import toast from 'react-hot-toast';
 
@@ -816,6 +816,11 @@ const DoctorDashboard: React.FC = () => {
                 </div>
               </div>
             </div>
+
+            {/* Live Vital Monitor */}
+            <div className="mt-6">
+              <LiveVitalMonitor />
+            </div>
           </div>
         )}
 
@@ -1517,9 +1522,6 @@ const DoctorDashboard: React.FC = () => {
           </div>
         </div>
       )}
-
-      {/* Real-time Vital Monitor */}
-      <RealTimeVitalMonitor />
     </div>
   );
 };
