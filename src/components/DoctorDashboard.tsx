@@ -12,13 +12,15 @@ import {
   Calendar,
   Plus,
   Pill,
-  Stethoscope
+  Stethoscope,
+  BarChart3
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { appointmentsService } from '../lib/database';
 import NotificationBell from './NotificationBell';
 import LiveVitalMonitor from './LiveVitalMonitor';
+import AnalyticsDashboard from './AnalyticsDashboard';
 import NotificationService from '../services/notificationService';
 import toast from 'react-hot-toast';
 
@@ -86,7 +88,7 @@ const DoctorDashboard: React.FC = () => {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [activeTab, setActiveTab] = useState<'overview' | 'patients' | 'vitals' | 'appointments' | 'medications'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'patients' | 'vitals' | 'appointments' | 'medications' | 'analytics'>('overview');
   const [showAddPatientModal, setShowAddPatientModal] = useState(false);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
@@ -677,7 +679,8 @@ const DoctorDashboard: React.FC = () => {
               { id: 'patients', label: 'Patients', icon: Users },
               { id: 'vitals', label: 'Vital Signs', icon: Heart },
               { id: 'medications', label: 'Medications', icon: Pill },
-              { id: 'appointments', label: 'Appointments', icon: Calendar }
+              { id: 'appointments', label: 'Appointments', icon: Calendar },
+              { id: 'analytics', label: 'Analytics', icon: BarChart3 }
             ].map(tab => {
               const Icon = tab.icon;
               return (
@@ -1380,6 +1383,11 @@ const DoctorDashboard: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Analytics Tab */}
+      {activeTab === 'analytics' && (
+        <AnalyticsDashboard />
       )}
 
       {/* Schedule Appointment Modal */}
